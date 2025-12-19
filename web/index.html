@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Prismo Super Admin - Management Console">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Prismo Super Admin">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Prismo Super Admin</title>
+  <link rel="manifest" href="manifest.json">
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+    }
+    
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Space Mono', monospace;
+    }
+    
+    .loading-icon {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, #e94560, #ff6b6b);
+      border-radius: 16px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 24px;
+      animation: pulse 2s infinite;
+    }
+    
+    .loading-icon svg {
+      width: 32px;
+      height: 32px;
+      fill: white;
+    }
+    
+    .loading-text {
+      color: #fff;
+      font-size: 14px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: 0.8; }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading-container">
+    <div class="loading-icon">
+      <svg viewBox="0 0 24 24">
+        <path d="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,5A3,3 0 0,1 15,8A3,3 0 0,1 12,11A3,3 0 0,1 9,8A3,3 0 0,1 12,5M17.13,17C15.92,18.85 14.11,20.24 12,20.92C9.89,20.24 8.08,18.85 6.87,17C6.53,16.5 6.24,16 6,15.47C6,13.82 8.71,12.47 12,12.47C15.29,12.47 18,13.79 18,15.47C17.76,16 17.47,16.5 17.13,17Z"/>
+      </svg>
+    </div>
+    <div class="loading-text">Loading...</div>
+  </div>
+  
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
