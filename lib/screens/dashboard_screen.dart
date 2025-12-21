@@ -130,8 +130,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Find current manager for a store
+  Manager? _findCurrentManager(String storeId) {
+    for (final m in _managers) {
+      if (m.vendorIds.contains(storeId)) {
+        return m;
+      }
+    }
+    return null;
+  }
+
+  // Show transfer confirmation dialog
+  Future<bool> _showTransferConfirmation(Store store, Manager currentManager, Manager newManager) async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1e1e2e),
+        title: Row(
+          children: [
+            const Icon(Icons.swap_horiz, color: Colors.orange),
+            const SizedBox(width: 12),
+            Text('Transfer Store?', style: GoogleFonts.inter(color: Colors.white)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '"${store.name}" is currently assigned to ${currentManager.name}.',
+              style: GoogleFonts.inter(color: Colors.white70),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Transfer to ${newManager.name}?',
+              style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: Text('Transfer', style: GoogleFonts.inter(color: Colors.white)),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
   void _showAssignStoreDialog(Manager manager) {
-    final unassignedStores = _stores.where((s) => !manager.vendorIds.contains(s.id)).toList();
+    // Get stores not already assigned to THIS manager
+    final availableStores = _stores.where((s) => !manager.vendorIds.contains(s.id)).toList();
 
     showDialog(
       context: context,
@@ -148,39 +202,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
         content: SizedBox(
           width: 400,
           height: 400,
-          child: unassignedStores.isEmpty
+          child: availableStores.isEmpty
               ? Center(
                   child: Text(
-                    'All stores are already assigned',
+                    'No stores available to assign',
                     style: GoogleFonts.inter(color: Colors.white54),
                   ),
                 )
               : ListView.builder(
-                  itemCount: unassignedStores.length,
+                  itemCount: availableStores.length,
                   itemBuilder: (context, index) {
-                    final store = unassignedStores[index];
+                    final store = availableStores[index];
+                    final currentManager = _findCurrentManager(store.id);
+                    final isAssigned = currentManager != null;
+                    
                     return ListTile(
                       leading: Container(
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0f3460),
+                          color: isAssigned ? Colors.orange.withOpacity(0.2) : const Color(0xFF0f3460),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(Icons.store, color: Colors.white70, size: 20),
+                        child: Icon(
+                          Icons.store, 
+                          color: isAssigned ? Colors.orange : Colors.white70, 
+                          size: 20,
+                        ),
                       ),
                       title: Text(store.name, style: GoogleFonts.inter(color: Colors.white)),
-                      subtitle: Text(store.id, style: GoogleFonts.robotoMono(color: Colors.white38, fontSize: 11)),
+                      subtitle: Text(
+                        isAssigned 
+                          ? '${store.id}\n⚠️ Assigned to: ${currentManager.name}'
+                          : store.id,
+                        style: GoogleFonts.robotoMono(
+                          color: isAssigned ? Colors.orange.withOpacity(0.7) : Colors.white38, 
+                          fontSize: 11,
+                        ),
+                      ),
+                      isThreeLine: isAssigned,
                       trailing: IconButton(
-                        icon: const Icon(Icons.add_circle, color: Color(0xFF4CAF50)),
-                        onPressed: () {
+                        icon: Icon(
+                          isAssigned ? Icons.swap_horiz : Icons.add_circle, 
+                          color: isAssigned ? Colors.orange : const Color(0xFF4CAF50),
+                        ),
+                        onPressed: () async {
                           Navigator.pop(context);
-                          _assignStore(manager, store);
+                          if (isAssigned) {
+                            // Show confirmation for transfer
+                            final confirmed = await _showTransferConfirmation(store, currentManager, manager);
+                            if (confirmed) {
+                              _assignStore(manager, store);
+                            }
+                          } else {
+                            _assignStore(manager, store);
+                          }
                         },
                       ),
-                      onTap: () {
+                      onTap: () async {
                         Navigator.pop(context);
-                        _assignStore(manager, store);
+                        if (isAssigned) {
+                          // Show confirmation for transfer
+                          final confirmed = await _showTransferConfirmation(store, currentManager, manager);
+                          if (confirmed) {
+                            _assignStore(manager, store);
+                          }
+                        } else {
+                          _assignStore(manager, store);
+                        }
                       },
                     );
                   },
