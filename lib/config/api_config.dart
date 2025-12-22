@@ -36,5 +36,28 @@ class ApiConfig {
   // =====================================================
   
   static String get storesUrl => '$baseUrl/admin/inventory/stores';
+  
+  // =====================================================
+  // VENDOR ACTIVATION & DOCUMENT ENDPOINTS
+  // =====================================================
+  
+  // Get vendor activation status (GET)
+  static String vendorActivationStatusUrl(String vendorId) => 
+      '$baseUrl/vendors/activation/status/$vendorId';
+  
+  // Update document status (PUT)
+  static String documentStatusUrl(String vendorId, int documentId) => 
+      '$baseUrl/vendors/activation/$vendorId/documents/$documentId/status';
+  
+  // Get document download URL (GET)
+  static String documentDownloadUrl(String vendorId, int documentId) => 
+      '$baseUrl/vendors/activation/$vendorId/documents/$documentId/download-url';
+  
+  // Approve vendor activation (POST)
+  static String approveVendorUrl(String vendorId) => 
+      '$baseUrl/vendors/activation/$vendorId/approve';
+  
+  // Get all vendors with pending documents
+  static String get vendorsUrl => '$baseUrl/vendors';
 }
 
