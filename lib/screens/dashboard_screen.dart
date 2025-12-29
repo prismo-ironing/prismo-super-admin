@@ -245,6 +245,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Reject vendor activation
+  Future<void> _rejectVendorActivation() async {
+    if (_selectedStoreForDocuments == null) return;
+    
+    final controller = TextEditingController();
+    
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1e1e2e),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel, color: Colors.red),
+            const SizedBox(width: 12),
+            Text(
+              'Reject Vendor Activation',
+              style: GoogleFonts.inter(color: Colors.white),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Please provide a reason for rejection:',
+              style: GoogleFonts.inter(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              style: GoogleFonts.inter(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Rejection reason...',
+                hintStyle: GoogleFonts.inter(color: Colors.white38),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.1),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Colors.red),
+                ),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white70)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: Text('Reject', style: GoogleFonts.inter()),
+          ),
+        ],
+      ),
+    );
+    
+    if (reason != null) {
+      final success = await ApiService.rejectVendorActivation(
+        _selectedStoreForDocuments!.id,
+        reason: reason.isEmpty ? 'Vendor activation rejected by Super Admin' : reason,
+      );
+      
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Vendor ${_selectedStoreForDocuments!.name} rejected'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        // Reload documents and data
+        _loadVendorDocuments(_selectedStoreForDocuments!);
+        _loadData();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to reject vendor'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   // Show rejection dialog
   Future<void> _showRejectDialog(VendorDocument doc) async {
     final controller = TextEditingController();
@@ -1149,16 +1242,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                 ),
-                if (status.canApprove && status.activationStatus != 'APPROVED')
-                  ElevatedButton.icon(
-                    onPressed: _approveVendorActivation,
-                    icon: const Icon(Icons.check_circle, size: 18),
-                    label: const Text('Activate Vendor'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
+                // Always show approve/reject buttons for full control
+                Row(
+                  children: [
+                    // Always show approve button (enabled for full control)
+                    ElevatedButton.icon(
+                      onPressed: _approveVendorActivation,
+                      icon: const Icon(Icons.check_circle, size: 18),
+                      label: Text(status.activationStatus == 'APPROVED' 
+                          ? 'Re-approve Vendor' 
+                          : 'Approve Vendor'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    // Always show reject button (enabled for full control)
+                    OutlinedButton.icon(
+                      onPressed: _rejectVendorActivation,
+                      icon: const Icon(Icons.cancel, size: 18),
+                      label: Text(status.activationStatus == 'REJECTED'
+                          ? 'Reject Again'
+                          : 'Reject Vendor'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
@@ -1310,12 +1423,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
           
-          // Action Buttons (only for pending documents)
-          if (doc.isPending) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
+          // Action Buttons (always visible for full control)
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Show reject button if not already rejected
+              if (!doc.isRejected)
                 OutlinedButton.icon(
                   onPressed: () => _showRejectDialog(doc),
                   icon: const Icon(Icons.close, size: 16),
@@ -1325,7 +1439,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     side: const BorderSide(color: Colors.red),
                   ),
                 ),
-                const SizedBox(width: 12),
+              // Show approve button if not already approved
+              if (!doc.isApproved) ...[
+                if (!doc.isRejected)
+                  const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: () => _approveDocument(doc),
                   icon: const Icon(Icons.check, size: 16),
@@ -1336,8 +1453,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ],
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );

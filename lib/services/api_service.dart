@@ -166,6 +166,26 @@ class ApiService {
     }
   }
 
+  /// Reject vendor activation
+  static Future<bool> rejectVendorActivation(String vendorId, {String? reason}) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse(ApiConfig.rejectVendorUrl(vendorId)),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'reason': reason ?? 'Vendor activation rejected by Super Admin',
+            }),
+          )
+          .timeout(_timeout);
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error rejecting vendor: $e');
+      return false;
+    }
+  }
+
   /// Get signed download URL for a document
   static Future<String?> getDocumentDownloadUrl(String vendorId, int documentId) async {
     try {

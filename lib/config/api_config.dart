@@ -57,6 +57,10 @@ class ApiConfig {
   static String approveVendorUrl(String vendorId) => 
       '$baseUrl/vendors/activation/$vendorId/approve';
   
+  // Reject vendor activation (POST)
+  static String rejectVendorUrl(String vendorId) => 
+      '$baseUrl/vendors/activation/$vendorId/reject';
+  
   // Get all vendors with pending documents
   static String get vendorsUrl => '$baseUrl/vendors';
 }

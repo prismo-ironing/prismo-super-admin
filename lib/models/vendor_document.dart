@@ -109,7 +109,7 @@ class VendorActivationStatus {
       documents: docs,
       uploadedDocuments: json['uploadedDocuments'] ?? 0,
       approvedDocuments: json['approvedDocuments'] ?? 0,
-      totalRequiredDocuments: json['totalRequiredDocuments'] ?? 2,
+      totalRequiredDocuments: json['totalRequiredDocuments'] ?? 5,
       basicInfoCompleted: json['basicInfoCompleted'] ?? false,
       panCardCompleted: json['panCardCompleted'] ?? false,
       drugLicenseCompleted: json['drugLicenseCompleted'] ?? false,
