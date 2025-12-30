@@ -40,6 +40,12 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   bool _isLoadingUsers = false;
   bool _isLoadingMore = false;
   
+  // Vendor list state
+  List<Store> _filteredStores = [];
+  String _vendorSearchQuery = '';
+  String _vendorSortBy = 'name';
+  bool _vendorSortAsc = true;
+  
   // Order counts map (userId -> orderCount)
   Map<String, int> _userOrderCounts = {};
   
@@ -50,9 +56,11 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   int _totalPages = 0;
   bool get _hasMoreItems => _currentPage < _totalPages - 1;
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _vendorScrollController = ScrollController();
   
   // Search debounce timer
   Timer? _searchDebounceTimer;
+  Timer? _vendorSearchDebounceTimer;
 
   @override
   void initState() {
@@ -61,6 +69,12 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     if (widget.type == 'users') {
       _scrollController.addListener(_onScroll);
       _loadUsers();
+    } else if (widget.type == 'vendors') {
+      _vendorScrollController.addListener(_onVendorScroll);
+      // Apply initial filter after stores are loaded
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applyVendorFilters();
+      });
     }
   }
   
@@ -69,8 +83,15 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     if (widget.type == 'users') {
       _scrollController.dispose();
       _searchDebounceTimer?.cancel();
+    } else if (widget.type == 'vendors') {
+      _vendorScrollController.dispose();
+      _vendorSearchDebounceTimer?.cancel();
     }
     super.dispose();
+  }
+  
+  void _onVendorScroll() {
+    // Can add pagination later if needed
   }
   
   void _onScroll() {
@@ -93,6 +114,11 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
         _managers = results[1] as List<Manager>;
         _isLoading = false;
       });
+      
+      // Apply initial filters for vendors
+      if (widget.type == 'vendors') {
+        _applyVendorFilters();
+      }
     } catch (e) {
       setState(() => _isLoading = false);
     }
@@ -183,12 +209,14 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
           ? const Center(child: CircularProgressIndicator())
           : widget.type == 'users'
               ? _buildScrollableUserContent(typeColor)
-              : Column(
-                  children: [
-                    if (widget.type != 'users') _buildFilters(typeColor),
-                    Expanded(child: _buildContent(typeColor)),
-                  ],
-                ),
+              : widget.type == 'vendors'
+                  ? _buildScrollableVendorContent(typeColor)
+                  : Column(
+                      children: [
+                        if (widget.type != 'users' && widget.type != 'vendors') _buildFilters(typeColor),
+                        Expanded(child: _buildContent(typeColor)),
+                      ],
+                    ),
     );
   }
 
@@ -314,10 +342,8 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       case 'vendors':
         return [
           {'value': 'all', 'label': 'All Vendors'},
-          {'value': 'approved', 'label': 'Approved'},
-          {'value': 'pending', 'label': 'Pending'},
-          {'value': 'rejected', 'label': 'Rejected'},
-          {'value': 'verified', 'label': 'Verified'},
+          {'value': 'active', 'label': 'Active'},
+          {'value': 'inactive', 'label': 'Inactive'},
         ];
       case 'orders':
         return [
@@ -413,64 +439,143 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       case 'revenue':
         return [
           _buildInsightItem(
+            'Total Revenue',
+            _formatCurrency(widget.analytics.revenue.total),
+            typeColor,
+            Icons.account_balance_wallet,
+            description: 'Cumulative revenue from all completed orders',
+          ),
+          _buildInsightItem(
+            'This Month Revenue',
+            _formatCurrency(widget.analytics.revenue.thisMonth),
+            typeColor,
+            Icons.calendar_month,
+            description: 'Total revenue generated in the current month',
+          ),
+          _buildInsightItem(
+            "Today's Revenue",
+            _formatCurrency(widget.analytics.revenue.today),
+            typeColor,
+            Icons.today,
+            description: 'Revenue generated today from completed orders',
+          ),
+          _buildInsightItem(
             'Revenue Growth',
             _calculateRevenueGrowth(),
             typeColor,
             Icons.trending_up,
+            description: _getRevenueGrowthDescription(),
           ),
           _buildInsightItem(
             'Average Order Value',
             _formatCurrency(_calculateAOV()),
             typeColor,
             Icons.receipt,
+            description: 'Average amount per completed order (Total Revenue ÷ Completed Orders)',
+          ),
+          _buildInsightItem(
+            'Daily Average (This Month)',
+            _formatCurrency(_calculateDailyAverage()),
+            typeColor,
+            Icons.show_chart,
+            description: 'Average daily revenue for the current month',
           ),
           _buildInsightItem(
             'Monthly Projection',
             _formatCurrency(_calculateMonthlyProjection()),
             typeColor,
-            Icons.calendar_month,
+            Icons.timeline,
+            description: 'Projected monthly revenue based on today\'s performance',
           ),
         ];
       case 'vendors':
         return [
           _buildInsightItem(
             'Approval Rate',
-            '${_calculateApprovalRate()}%',
+            '${_calculateApprovalRate().toStringAsFixed(2)}%',
             typeColor,
             Icons.check_circle,
+            description: 'Percentage of vendors approved for operations',
           ),
           _buildInsightItem(
             'Active Rate',
-            '${_calculateActiveRate()}%',
+            '${_calculateActiveRate().toStringAsFixed(2)}%',
             typeColor,
             Icons.store_mall_directory,
+            description: 'Percentage of vendors currently active and operational',
           ),
           _buildInsightItem(
             'Verification Rate',
-            '${_calculateVerificationRate()}%',
+            '${_calculateVerificationRate().toStringAsFixed(2)}%',
             typeColor,
             Icons.verified,
+            description: 'Percentage of vendors that have completed verification',
           ),
         ];
       case 'orders':
         return [
           _buildInsightItem(
-            'Completion Rate',
-            '${_calculateCompletionRate()}%',
+            'Total Orders',
+            '${widget.analytics.orders.total}',
+            typeColor,
+            Icons.shopping_cart,
+            description: 'Total number of orders placed in the system',
+          ),
+          _buildInsightItem(
+            'Completed Orders',
+            '${widget.analytics.orders.completed}',
             typeColor,
             Icons.check_circle,
+            description: 'Number of orders successfully delivered and completed',
+          ),
+          _buildInsightItem(
+            'Pending Orders',
+            '${widget.analytics.orders.pending}',
+            typeColor,
+            Icons.pending,
+            description: 'Orders awaiting processing or vendor assignment',
+          ),
+          _buildInsightItem(
+            'In Progress',
+            '${widget.analytics.orders.inProgress}',
+            typeColor,
+            Icons.local_shipping,
+            description: 'Orders currently being processed or out for delivery',
+          ),
+          _buildInsightItem(
+            "Today's Orders",
+            '${widget.analytics.orders.today}',
+            typeColor,
+            Icons.today,
+            description: 'Number of orders placed today',
+          ),
+          _buildInsightItem(
+            'Completion Rate',
+            '${_calculateCompletionRate().toStringAsFixed(2)}%',
+            typeColor,
+            Icons.trending_up,
+            description: _getCompletionRateDescription(),
           ),
           _buildInsightItem(
             'Cancellation Rate',
-            '${_calculateCancellationRate()}%',
+            '${_calculateCancellationRate().toStringAsFixed(2)}%',
             typeColor,
             Icons.cancel,
+            description: _getCancellationRateDescription(),
           ),
           _buildInsightItem(
-            'Average Orders/Day',
-            '${_calculateAvgOrdersPerDay()}',
+            'Average Orders/Day (This Month)',
+            '${_calculateAvgOrdersPerDay().toStringAsFixed(1)}',
             typeColor,
-            Icons.today,
+            Icons.show_chart,
+            description: 'Average number of orders per day in the current month',
+          ),
+          _buildInsightItem(
+            'Monthly Order Projection',
+            '${_calculateMonthlyOrderProjection().toStringAsFixed(0)}',
+            typeColor,
+            Icons.timeline,
+            description: 'Projected total orders for the month based on today\'s performance',
           ),
         ];
       case 'users':
@@ -506,7 +611,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     }
   }
 
-  Widget _buildInsightItem(String label, String value, Color color, IconData icon) {
+  Widget _buildInsightItem(String label, String value, Color color, IconData icon, {String? description}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -539,6 +644,16 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                if (description != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF9CA3AF),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -562,13 +677,11 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   }
 
   Widget _buildVendorList() {
-    final filteredStores = _getFilteredStores();
-    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Vendors (${filteredStores.length})',
+          'Vendors (${_filteredStores.length})',
           style: GoogleFonts.inter(
             color: const Color(0xFF1F2937),
             fontSize: 18,
@@ -576,20 +689,314 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        ...filteredStores.map((store) => _buildVendorCard(store)),
+        ..._filteredStores.map((store) => _buildVendorCard(store)),
       ],
     );
   }
 
-  List<Store> _getFilteredStores() {
-    var stores = _stores;
+  // Client-side search and filter for vendors
+  void _applyVendorFilters() {
+    var filtered = List<Store>.from(_stores);
     
-    if (_selectedFilter == 'approved') {
-      // Filter by activation status - would need to check each store
-      return stores;
+    // Apply search query first (client-side filtering)
+    if (_vendorSearchQuery.trim().isNotEmpty) {
+      final query = _vendorSearchQuery.toLowerCase().trim();
+      filtered = filtered.where((store) {
+        return store.name.toLowerCase().contains(query) ||
+            store.id.toLowerCase().contains(query) ||
+            (store.city?.toLowerCase().contains(query) ?? false) ||
+            (store.state?.toLowerCase().contains(query) ?? false) ||
+            (store.address?.toLowerCase().contains(query) ?? false);
+      }).toList();
     }
     
-    return stores;
+    // Apply status filter
+    if (_selectedFilter == 'active') {
+      filtered = filtered.where((s) => s.isActive).toList();
+    } else if (_selectedFilter == 'inactive') {
+      filtered = filtered.where((s) => !s.isActive).toList();
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) {
+      int compare = 0;
+      switch (_vendorSortBy) {
+        case 'name':
+          compare = a.name.compareTo(b.name);
+          break;
+        case 'city':
+          compare = (a.city ?? '').compareTo(b.city ?? '');
+          break;
+        case 'state':
+          compare = (a.state ?? '').compareTo(b.state ?? '');
+          break;
+        default:
+          compare = a.name.compareTo(b.name);
+      }
+      return _vendorSortAsc ? compare : -compare;
+    });
+    
+    setState(() {
+      _filteredStores = filtered;
+    });
+  }
+  
+  void _onVendorSearchChanged(String value) {
+    setState(() {
+      _vendorSearchQuery = value;
+    });
+    
+    // Cancel previous timer
+    _vendorSearchDebounceTimer?.cancel();
+    
+    // Client-side search - instant filtering on cached stores
+    _vendorSearchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _applyVendorFilters();
+    });
+  }
+
+  Widget _buildScrollableVendorContent(Color typeColor) {
+    return CustomScrollView(
+      controller: _vendorScrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        // Business Insights
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: _buildInsights(typeColor),
+          ),
+        ),
+        // Search and Filter bar
+        SliverToBoxAdapter(
+          child: _buildVendorSearchAndFilter(typeColor),
+        ),
+        // Vendors header
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Vendors (${_filteredStores.length}${_stores.length > _filteredStores.length ? ' / ${_stores.length}' : ''})',
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFF1F2937),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Vendors list
+        _filteredStores.isEmpty
+            ? SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    'No vendors found',
+                    style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+                  ),
+                ),
+              )
+            : SliverPadding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      return _buildVendorCard(_filteredStores[index]);
+                    },
+                    childCount: _filteredStores.length,
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+
+  Widget _buildVendorSearchAndFilter(Color typeColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Search
+          Expanded(
+            flex: 2,
+            child: TextField(
+              onChanged: _onVendorSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search vendors by name...',
+                hintStyle: GoogleFonts.inter(color: const Color(0xFF9CA3AF)),
+                prefixIcon: Icon(Icons.search, color: typeColor),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 1.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor.withOpacity(0.5), width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              style: GoogleFonts.inter(
+                color: const Color(0xFF1F2937),
+                fontSize: 14,
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Filter by status
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _selectedFilter,
+              decoration: InputDecoration(
+                labelText: 'Status',
+                labelStyle: GoogleFonts.inter(color: typeColor, fontWeight: FontWeight.w500),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 1.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor.withOpacity(0.5), width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              dropdownColor: Colors.white,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF1F2937),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              icon: Icon(Icons.arrow_drop_down, color: typeColor),
+              items: [
+                DropdownMenuItem(
+                  value: 'all',
+                  child: Text('All Vendors', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+                DropdownMenuItem(
+                  value: 'active',
+                  child: Text('Active', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+                DropdownMenuItem(
+                  value: 'inactive',
+                  child: Text('Inactive', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedFilter = value ?? 'all';
+                  _applyVendorFilters();
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          
+          // Sort
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              value: _vendorSortBy,
+              decoration: InputDecoration(
+                labelText: 'Sort By',
+                labelStyle: GoogleFonts.inter(color: typeColor, fontWeight: FontWeight.w500),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 1.5),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor.withOpacity(0.5), width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: typeColor, width: 2),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              dropdownColor: Colors.white,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF1F2937),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+              icon: Icon(Icons.arrow_drop_down, color: typeColor),
+              items: [
+                DropdownMenuItem(
+                  value: 'name',
+                  child: Text('Name', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+                DropdownMenuItem(
+                  value: 'city',
+                  child: Text('City', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+                DropdownMenuItem(
+                  value: 'state',
+                  child: Text('State', style: GoogleFonts.inter(color: const Color(0xFF1F2937))),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _vendorSortBy = value ?? 'name';
+                  _applyVendorFilters();
+                });
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          
+          // Sort direction
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: typeColor, width: 1.5),
+            ),
+            child: IconButton(
+              icon: Icon(
+                _vendorSortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                color: typeColor,
+                size: 20,
+              ),
+              onPressed: () {
+                setState(() {
+                  _vendorSortAsc = !_vendorSortAsc;
+                  _applyVendorFilters();
+                });
+              },
+              tooltip: _vendorSortAsc ? 'Ascending' : 'Descending',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildVendorCard(Store store) {
@@ -623,13 +1030,47 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  store.name,
-                  style: GoogleFonts.inter(
-                    color: const Color(0xFF1F2937),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        store.name,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF1F2937),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: store.isActive 
+                            ? const Color(0xFF10B981).withOpacity(0.1)
+                            : const Color(0xFFEF4444).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            store.isActive ? Icons.check_circle : Icons.cancel,
+                            size: 14,
+                            color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            store.isActive ? 'Active' : 'Inactive',
+                            style: GoogleFonts.inter(
+                              color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -639,6 +1080,22 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
                     fontSize: 12,
                   ),
                 ),
+                if (store.displayLocation != 'Location N/A') ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.location_on, size: 14, color: const Color(0xFF6B7280)),
+                      const SizedBox(width: 4),
+                      Text(
+                        store.displayLocation,
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF6B7280),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -1273,11 +1730,38 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   String _calculateRevenueGrowth() {
     final thisMonth = widget.analytics.revenue.thisMonth;
     final today = widget.analytics.revenue.today;
-    if (thisMonth == 0) return '0%';
-    final dailyAvg = thisMonth / 30;
-    if (dailyAvg == 0) return '0%';
+    if (thisMonth == 0) return '0.00%';
+    final dailyAvg = thisMonth / DateTime.now().day; // Use actual days in month so far
+    if (dailyAvg == 0) return '0.00%';
     final growth = ((today - dailyAvg) / dailyAvg * 100);
-    return '${growth.toStringAsFixed(1)}%';
+    return '${growth.toStringAsFixed(2)}%';
+  }
+  
+  String _getRevenueGrowthDescription() {
+    final thisMonth = widget.analytics.revenue.thisMonth;
+    final today = widget.analytics.revenue.today;
+    if (thisMonth == 0 || today == 0) {
+      return 'No revenue data available for comparison';
+    }
+    final dailyAvg = thisMonth / DateTime.now().day;
+    if (dailyAvg == 0) {
+      return 'Insufficient data to calculate growth';
+    }
+    final growth = ((today - dailyAvg) / dailyAvg * 100);
+    if (growth > 0) {
+      return 'Today\'s revenue is ${growth.toStringAsFixed(2)}% above the month\'s daily average - positive trend';
+    } else if (growth < 0) {
+      return 'Today\'s revenue is ${(-growth).toStringAsFixed(2)}% below the month\'s daily average - needs attention';
+    } else {
+      return 'Today\'s revenue matches the month\'s daily average';
+    }
+  }
+  
+  double _calculateDailyAverage() {
+    final thisMonth = widget.analytics.revenue.thisMonth;
+    final daysInMonth = DateTime.now().day;
+    if (daysInMonth == 0) return 0;
+    return thisMonth / daysInMonth;
   }
 
   double _calculateAOV() {
@@ -1289,7 +1773,8 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
 
   double _calculateMonthlyProjection() {
     final today = widget.analytics.revenue.today;
-    return today * 30; // Simple projection
+    final daysInMonth = DateTime(DateTime.now().year, DateTime.now().month + 1, 0).day;
+    return today * daysInMonth; // Project based on actual days in month
   }
 
   double _calculateApprovalRate() {
@@ -1323,8 +1808,53 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   }
 
   double _calculateAvgOrdersPerDay() {
+    final thisMonthOrders = _getThisMonthOrdersCount();
+    final daysInMonth = DateTime.now().day;
+    if (daysInMonth == 0) return 0;
+    return thisMonthOrders / daysInMonth;
+  }
+  
+  int _getThisMonthOrdersCount() {
+    // This is an approximation - ideally we'd have thisMonthOrders in OrderStats
+    // For now, we'll estimate based on total orders and today's orders
+    // A better implementation would track this in the analytics service
+    final total = widget.analytics.orders.total;
     final today = widget.analytics.orders.today;
-    return today.toDouble();
+    // Rough estimate: assume orders are distributed somewhat evenly
+    // This is a placeholder - should be improved with actual monthly tracking
+    return (total * DateTime.now().day / 30).round();
+  }
+  
+  double _calculateMonthlyOrderProjection() {
+    final today = widget.analytics.orders.today;
+    final daysInMonth = DateTime(DateTime.now().year, DateTime.now().month + 1, 0).day;
+    return (today * daysInMonth).toDouble();
+  }
+  
+  String _getCompletionRateDescription() {
+    final rate = _calculateCompletionRate();
+    if (rate >= 90) {
+      return 'Excellent completion rate (${rate.toStringAsFixed(2)}%) - Strong operational performance';
+    } else if (rate >= 75) {
+      return 'Good completion rate (${rate.toStringAsFixed(2)}%) - Above average performance';
+    } else if (rate >= 50) {
+      return 'Moderate completion rate (${rate.toStringAsFixed(2)}%) - Room for improvement';
+    } else {
+      return 'Low completion rate (${rate.toStringAsFixed(2)}%) - Needs immediate attention';
+    }
+  }
+  
+  String _getCancellationRateDescription() {
+    final rate = _calculateCancellationRate();
+    if (rate <= 5) {
+      return 'Low cancellation rate (${rate.toStringAsFixed(2)}%) - Excellent customer satisfaction';
+    } else if (rate <= 10) {
+      return 'Moderate cancellation rate (${rate.toStringAsFixed(2)}%) - Within acceptable range';
+    } else if (rate <= 20) {
+      return 'High cancellation rate (${rate.toStringAsFixed(2)}%) - Review order fulfillment process';
+    } else {
+      return 'Very high cancellation rate (${rate.toStringAsFixed(2)}%) - Critical issue requiring action';
+    }
   }
 
   String _getTotalCount() {
