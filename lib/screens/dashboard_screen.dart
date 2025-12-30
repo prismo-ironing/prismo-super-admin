@@ -7,6 +7,7 @@ import '../models/store.dart';
 import '../models/vendor_document.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
+import 'analytics_dashboard_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -471,7 +472,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF1e1e2e),
         title: Row(
           children: [
-            const Icon(Icons.add_business, color: Color(0xFFe94560)),
+            const Icon(Icons.add_business, color: Color(0xFF6366F1)),
             const SizedBox(width: 12),
             Expanded(
               child: Text('Assign Store to ${manager.name}', 
@@ -591,9 +592,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0a0a0f),
+      backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1a1a2e),
+        backgroundColor: Colors.white,
         elevation: 0,
         title: Row(
           children: [
@@ -601,7 +602,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFFe94560), Color(0xFFff6b6b)],
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -610,23 +611,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 12),
             Text(
               'Prismo Super Admin',
-              style: GoogleFonts.spaceMono(
-                color: Colors.white,
+              style: GoogleFonts.inter(
+                color: const Color(0xFF1F2937),
                 fontWeight: FontWeight.bold,
-                letterSpacing: 1,
+                fontSize: 20,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white70),
+            icon: const Icon(Icons.analytics, color: Color(0xFF6366F1)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AnalyticsDashboardScreen()),
+              );
+            },
+            tooltip: 'Analytics',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Color(0xFF6B7280)),
             onPressed: _loadData,
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white70),
+            icon: const Icon(Icons.logout, color: Color(0xFF6B7280)),
             onPressed: _logout,
             tooltip: 'Logout',
           ),
@@ -635,7 +646,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFe94560)),
+              child: CircularProgressIndicator(color: Color(0xFF6366F1)),
             )
           : _error != null
               ? Center(
@@ -698,9 +709,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1a1a2e),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -709,12 +726,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Icon(Icons.people, color: Color(0xFFe94560)),
+                const Icon(Icons.people, color: Color(0xFF6366F1)),
                 const SizedBox(width: 12),
                 Text(
                   'Managers',
                   style: GoogleFonts.inter(
-                    color: Colors.white,
+                    color: const Color(0xFF1F2937),
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -723,13 +740,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFe94560).withOpacity(0.2),
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '${_managers.length}',
-                    style: GoogleFonts.spaceMono(
-                      color: const Color(0xFFe94560),
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF6366F1),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -737,7 +754,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const Divider(color: Colors.white10, height: 1),
+          const Divider(color: Color(0xFFE5E7EB), height: 1),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -759,10 +776,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFe94560).withOpacity(0.15) : Colors.transparent,
+        color: isSelected ? const Color(0xFF6366F1).withOpacity(0.1) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
         border: isSelected 
-            ? Border.all(color: const Color(0xFFe94560).withOpacity(0.5)) 
+            ? Border.all(color: const Color(0xFF6366F1).withOpacity(0.3)) 
             : null,
       ),
       child: InkWell(
@@ -772,11 +789,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundColor: isSelected ? const Color(0xFFe94560) : const Color(0xFF0f3460),
+              backgroundColor: isSelected ? const Color(0xFF6366F1) : const Color(0xFFE5E7EB),
               child: Text(
                 manager.name.isNotEmpty ? manager.name[0].toUpperCase() : '?',
                 style: GoogleFonts.inter(
-                  color: Colors.white,
+                  color: isSelected ? Colors.white : const Color(0xFF6B7280),
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
                 ),
@@ -790,7 +807,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     manager.name,
                     style: GoogleFonts.inter(
-                      color: Colors.white,
+                      color: const Color(0xFF1F2937),
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       fontSize: 13,
                     ),
@@ -798,7 +815,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   Text(
                     manager.phoneNumber,
-                    style: GoogleFonts.robotoMono(color: Colors.white38, fontSize: 10),
+                    style: GoogleFonts.robotoMono(color: const Color(0xFF6B7280), fontSize: 10),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -832,19 +849,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1a1a2e),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.touch_app, size: 64, color: Colors.white.withOpacity(0.2)),
+            Icon(Icons.touch_app, size: 64, color: const Color(0xFF6B7280).withOpacity(0.3)),
             const SizedBox(height: 16),
             Text(
               'Select a manager to view details',
-              style: GoogleFonts.inter(color: Colors.white38, fontSize: 16),
+              style: GoogleFonts.inter(color: const Color(0xFF6B7280), fontSize: 16),
             ),
           ],
         ),
@@ -858,9 +881,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.only(top: 16, right: 16, bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1a1a2e),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -872,7 +901,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFFe94560).withOpacity(0.1),
+                  const Color(0xFF6366F1).withOpacity(0.1),
                   Colors.transparent,
                 ],
               ),
@@ -882,7 +911,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 CircleAvatar(
                   radius: 32,
-                  backgroundColor: const Color(0xFFe94560),
+                  backgroundColor: const Color(0xFF6366F1),
                   child: Text(
                     manager.name.isNotEmpty ? manager.name[0].toUpperCase() : '?',
                     style: GoogleFonts.inter(
@@ -900,7 +929,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text(
                         manager.name,
                         style: GoogleFonts.inter(
-                          color: Colors.white,
+                          color: const Color(0xFF1F2937),
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
                         ),
@@ -938,7 +967,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           
-          const Divider(color: Colors.white10, height: 1),
+          const Divider(color: Color(0xFFE5E7EB), height: 1),
           
           // Manager Info
           Padding(
@@ -959,7 +988,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                const Icon(Icons.store, color: Color(0xFFe94560), size: 20),
+                const Icon(Icons.store, color: Color(0xFF6366F1), size: 20),
                 const SizedBox(width: 8),
                 Text(
                   'Assigned Stores',
@@ -993,7 +1022,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           icon: const Icon(Icons.add, size: 18),
                           label: const Text('Assign a store'),
                           style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFFe94560),
+                            foregroundColor: const Color(0xFF6366F1),
                           ),
                         ),
                       ],
@@ -1013,7 +1042,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String text, {Color color = Colors.white54}) {
+  Widget _buildInfoChip(IconData icon, String text, {Color color = const Color(0xFF6B7280)}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1039,7 +1068,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF0f3460).withOpacity(0.5),
+          color: const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1047,16 +1076,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, size: 16, color: Colors.white38),
+                Icon(icon, size: 16, color: const Color(0xFF6B7280)),
                 const SizedBox(width: 8),
-                Text(label, style: GoogleFonts.inter(color: Colors.white38, fontSize: 12)),
+                Text(label, style: GoogleFonts.inter(color: const Color(0xFF6B7280), fontSize: 12)),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               value,
               style: GoogleFonts.robotoMono(
-                color: Colors.white,
+                color: const Color(0xFF1F2937),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -1076,13 +1105,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: isSelected 
-            ? const Color(0xFFe94560).withOpacity(0.15)
-            : const Color(0xFF0f3460).withOpacity(0.3),
+            ? const Color(0xFF6366F1).withOpacity(0.1)
+            : const Color(0xFFF3F4F6),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected 
-              ? const Color(0xFFe94560).withOpacity(0.5)
-              : Colors.white.withOpacity(0.05),
+              ? const Color(0xFF6366F1).withOpacity(0.3)
+              : const Color(0xFFE5E7EB),
         ),
       ),
       child: Row(
@@ -1104,14 +1133,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Text(
                   store.name,
                   style: GoogleFonts.inter(
-                    color: Colors.white,
+                    color: const Color(0xFF1F2937),
                     fontWeight: FontWeight.w600,
+                    fontSize: 15,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   store.id,
-                  style: GoogleFonts.robotoMono(color: Colors.white38, fontSize: 11),
+                  style: GoogleFonts.robotoMono(color: const Color(0xFF6B7280), fontSize: 11),
                 ),
               ],
             ),
@@ -1135,9 +1165,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Container(
       margin: const EdgeInsets.only(top: 16, right: 16, bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1a1a2e),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,14 +1201,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text(
                         'Document Review',
                         style: GoogleFonts.inter(
-                          color: Colors.white,
+                          color: const Color(0xFF1F2937),
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
                         _selectedStoreForDocuments?.name ?? '',
-                        style: GoogleFonts.inter(color: Colors.white54, fontSize: 12),
+                        style: GoogleFonts.inter(color: const Color(0xFF6B7280), fontSize: 12),
                       ),
                     ],
                   ),
@@ -1182,13 +1218,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _selectedStoreForDocuments = null;
                     _vendorActivationStatus = null;
                   }),
-                  icon: const Icon(Icons.close, color: Colors.white54),
+                  icon: const Icon(Icons.close, color: Color(0xFF6B7280)),
                 ),
               ],
             ),
           ),
           
-          const Divider(color: Colors.white10, height: 1),
+          const Divider(color: Color(0xFFE5E7EB), height: 1),
           
           // Content
           Expanded(
@@ -1200,7 +1236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ? Center(
                         child: Text(
                           'No activation data found',
-                          style: GoogleFonts.inter(color: Colors.white38),
+                          style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
                         ),
                       )
                     : _buildDocumentsList(),
@@ -1220,12 +1256,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           // Activation Status Card
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: _getStatusColor(status.activationStatus).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
+              gradient: LinearGradient(
+                colors: [
+                  _getStatusColor(status.activationStatus).withOpacity(0.15),
+                  _getStatusColor(status.activationStatus).withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: _getStatusColor(status.activationStatus).withOpacity(0.3),
+                color: _getStatusColor(status.activationStatus).withOpacity(0.4),
+                width: 2,
               ),
             ),
             child: Row(
@@ -1242,13 +1284,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       Text(
                         'Status: ${status.activationStatus}',
                         style: GoogleFonts.inter(
-                          color: Colors.white,
+                          color: const Color(0xFF1F2937),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
                         'Approved: ${status.approvedDocuments}/${status.totalRequiredDocuments} required',
-                        style: GoogleFonts.inter(color: Colors.white54, fontSize: 12),
+                        style: GoogleFonts.inter(color: const Color(0xFF6B7280), fontSize: 13),
                       ),
                     ],
                   ),
@@ -1292,9 +1334,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(
             'Documents (${status.documents.length})',
             style: GoogleFonts.inter(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+              color: const Color(0xFF1F2937),
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 12),
@@ -1308,11 +1350,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   children: [
-                    Icon(Icons.folder_open, size: 48, color: Colors.white.withOpacity(0.2)),
+                    Icon(Icons.folder_open, size: 48, color: const Color(0xFF6366F1).withOpacity(0.3)),
                     const SizedBox(height: 12),
                     Text(
                       'No documents uploaded yet',
-                      style: GoogleFonts.inter(color: Colors.white38),
+                      style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
                     ),
                   ],
                 ),
@@ -1324,19 +1366,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildDocumentCard(VendorDocument doc) {
+    final statusColor = doc.isApproved
+        ? const Color(0xFF10B981) // Green
+        : doc.isRejected
+            ? const Color(0xFFEF4444) // Red
+            : const Color(0xFFF59E0B); // Amber/Orange
+    
+    final statusBgColor = doc.isApproved
+        ? const Color(0xFFD1FAE5) // Light green
+        : doc.isRejected
+            ? const Color(0xFFFEE2E2) // Light red/pink
+            : const Color(0xFFFEF3C7); // Light amber
+    
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF0f3460).withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: doc.isApproved
-              ? Colors.green.withOpacity(0.3)
-              : doc.isRejected
-                  ? Colors.red.withOpacity(0.3)
-                  : Colors.orange.withOpacity(0.3),
+          color: statusColor.withOpacity(0.3),
+          width: 2,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: statusColor.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1344,14 +1402,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: doc.isApproved
-                      ? Colors.green.withOpacity(0.2)
-                      : doc.isRejected
-                          ? Colors.red.withOpacity(0.2)
-                          : Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: statusBgColor,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   doc.isApproved
@@ -1359,12 +1413,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       : doc.isRejected
                           ? Icons.cancel
                           : Icons.pending,
-                  color: doc.isApproved
-                      ? Colors.green
-                      : doc.isRejected
-                          ? Colors.red
-                          : Colors.orange,
-                  size: 20,
+                  color: statusColor,
+                  size: 24,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1375,19 +1425,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Text(
                       doc.displayType,
                       style: GoogleFonts.inter(
-                        color: Colors.white,
+                        color: const Color(0xFF1F2937),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    Text(
-                      'Status: ${doc.documentStatus}',
-                      style: GoogleFonts.inter(
-                        color: doc.isApproved
-                            ? Colors.green
-                            : doc.isRejected
-                                ? Colors.red
-                                : Colors.orange,
-                        fontSize: 12,
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusBgColor,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Status: ${doc.documentStatus}',
+                        style: GoogleFonts.inter(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
@@ -1402,9 +1456,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           
           if (doc.documentNumber != null || doc.documentName != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              height: 1,
+              color: const Color(0xFFE5E7EB),
+            ),
             const SizedBox(height: 12),
-            const Divider(color: Colors.white10),
-            const SizedBox(height: 8),
             if (doc.documentNumber != null)
               _buildDocumentDetail('Number', doc.documentNumber!),
             if (doc.documentName != null)
@@ -1412,21 +1469,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
           
           if (doc.reviewerComments != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(6),
+                color: const Color(0xFFF0F9FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: const Color(0xFF0EA5E9).withOpacity(0.2),
+                ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.comment, size: 14, color: Colors.white38),
+                  const Icon(Icons.comment, size: 16, color: Color(0xFF0EA5E9)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       doc.reviewerComments!,
-                      style: GoogleFonts.inter(color: Colors.white54, fontSize: 12),
+                      style: GoogleFonts.inter(color: const Color(0xFF1F2937), fontSize: 13),
                     ),
                   ),
                 ],
@@ -1473,16 +1533,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildDocumentDetail(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '$label: ',
-            style: GoogleFonts.inter(color: Colors.white38, fontSize: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF3F4F6),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '$label:',
+              style: GoogleFonts.inter(
+                color: const Color(0xFF6B7280),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
-          Text(
-            value,
-            style: GoogleFonts.robotoMono(color: Colors.white70, fontSize: 12),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.robotoMono(
+                color: const Color(0xFF1F2937),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
         ],
       ),

@@ -65,15 +65,16 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F7FA),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF1a1a2e),
-              Color(0xFF16213e),
-              Color(0xFF0f3460),
+              Color(0xFFF5F7FA),
+              Color(0xFFE8ECF1),
+              Color(0xFFF0F4F8),
             ],
           ),
         ),
@@ -84,15 +85,11 @@ class _LoginScreenState extends State<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 420),
               padding: const EdgeInsets.all(40),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.1),
-                  width: 1,
-                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withOpacity(0.08),
                     blurRadius: 30,
                     offset: const Offset(0, 10),
                   ),
@@ -107,12 +104,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 80,
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFe94560), Color(0xFFff6b6b)],
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFe94560).withOpacity(0.4),
+                          color: const Color(0xFF6366F1).withOpacity(0.3),
                           blurRadius: 20,
                           offset: const Offset(0, 8),
                         ),
@@ -129,11 +126,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Title
                   Text(
                     'Super Admin',
-                    style: GoogleFonts.spaceMono(
+                    style: GoogleFonts.inter(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 2,
+                      color: const Color(0xFF1F2937),
+                      letterSpacing: 0.5,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -141,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Prismo Management Console',
                     style: GoogleFonts.inter(
                       fontSize: 14,
-                      color: Colors.white60,
+                      color: const Color(0xFF6B7280),
                     ),
                   ),
                   const SizedBox(height: 40),
@@ -150,15 +147,15 @@ class _LoginScreenState extends State<LoginScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: _obscurePassword,
-                    style: GoogleFonts.inter(color: Colors.white),
+                    style: GoogleFonts.inter(color: const Color(0xFF1F2937)),
                     decoration: InputDecoration(
                       labelText: 'Access Code',
-                      labelStyle: GoogleFonts.inter(color: Colors.white54),
-                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.white54),
+                      labelStyle: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF6B7280)),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                          color: Colors.white54,
+                          color: const Color(0xFF6B7280),
                         ),
                         onPressed: () {
                           setState(() {
@@ -167,18 +164,18 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: const Color(0xFFF9FAFB),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: Color(0xFFe94560)),
+                        borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
                       ),
                     ),
                     onSubmitted: (_) => _login(),
@@ -215,7 +212,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _login,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFe94560),
+                        backgroundColor: const Color(0xFF6366F1),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -233,10 +230,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             )
                           : Text(
                               'ACCESS CONSOLE',
-                              style: GoogleFonts.spaceMono(
+                              style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                letterSpacing: 2,
+                                letterSpacing: 1,
                               ),
                             ),
                     ),
@@ -247,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     'Restricted Access Only',
                     style: GoogleFonts.inter(
                       fontSize: 12,
-                      color: Colors.white38,
+                      color: const Color(0xFF9CA3AF),
                     ),
                   ),
                 ],

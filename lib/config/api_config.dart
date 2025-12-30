@@ -63,5 +63,28 @@ class ApiConfig {
   
   // Get all vendors with pending documents
   static String get vendorsUrl => '$baseUrl/vendors';
+  
+  // Get all vendors (admin)
+  static String get allVendorsUrl => '$vendorsUrl/list/all';
+  
+  // =====================================================
+  // USER ENDPOINTS
+  // =====================================================
+  
+  static String get usersUrl => '$baseUrl/users';
+  static String get userStatsUrl => '$usersUrl/stats';
+  
+  // =====================================================
+  // ORDER ENDPOINTS
+  // =====================================================
+  
+  static String get ordersUrl => '$baseUrl/orders';
+  
+  // =====================================================
+  // MEDICINE ENDPOINTS
+  // =====================================================
+  
+  static String get medicinesUrl => '$baseUrl/medicines';
+  static String get inventoryStatsUrl => '$baseUrl/admin/inventory/stats';
 }
 
