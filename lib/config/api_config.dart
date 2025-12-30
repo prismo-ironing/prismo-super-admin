@@ -79,6 +79,7 @@ class ApiConfig {
   // =====================================================
   
   static String get ordersUrl => '$baseUrl/orders';
+  static String getUserOrdersUrl(String userId) => '$ordersUrl/user/$userId';
   
   // =====================================================
   // MEDICINE ENDPOINTS

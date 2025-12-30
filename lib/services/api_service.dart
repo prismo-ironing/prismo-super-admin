@@ -4,6 +4,7 @@ import '../config/api_config.dart';
 import '../models/manager.dart';
 import '../models/store.dart';
 import '../models/vendor_document.dart';
+import '../models/user.dart';
 
 class ApiService {
   static const Duration _timeout = Duration(seconds: 30);
@@ -202,6 +203,169 @@ class ApiService {
       print('Error getting document download URL: $e');
       return null;
     }
+  }
+
+  // =====================================================
+  // USER MANAGEMENT
+  // =====================================================
+
+  /// Get all users with pagination
+  static Future<Map<String, dynamic>> getAllUsers({
+    int page = 0,
+    int size = 50,
+    String sortBy = 'createdAt',
+    String? search,
+  }) async {
+    try {
+      http.Response response;
+      
+      // If search is provided, use search endpoint
+      if (search != null && search.trim().isNotEmpty) {
+        final url = '${ApiConfig.usersUrl}/search?name=${Uri.encodeComponent(search.trim())}';
+        response = await http.get(Uri.parse(url)).timeout(_timeout);
+        
+        if (response.statusCode == 200) {
+          final List<dynamic> data = json.decode(response.body);
+          final users = data.map((u) {
+            try {
+              return User.fromJson(u as Map<String, dynamic>);
+            } catch (e) {
+              print('Error parsing user from search: $e, User data: $u');
+              rethrow;
+            }
+          }).toList();
+          return {
+            'users': users,
+            'totalElements': users.length,
+            'totalPages': 1,
+            'currentPage': 0,
+            'pageSize': users.length,
+          };
+        }
+      } else {
+        final url = '${ApiConfig.usersUrl}?page=$page&size=$size&sortBy=$sortBy';
+        response = await http.get(Uri.parse(url)).timeout(_timeout);
+        
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = json.decode(response.body);
+          final contentList = data['content'] as List;
+          final usersList = <User>[];
+          
+          for (int i = 0; i < contentList.length; i++) {
+            try {
+              final userJson = contentList[i] as Map<String, dynamic>;
+              // Debug: print first user to see structure
+              if (i == 0) {
+                print('First User JSON: $userJson');
+              }
+              usersList.add(User.fromJson(userJson));
+            } catch (e) {
+              print('Error parsing user at index $i: $e, User data: ${contentList[i]}');
+              // Continue with next user instead of failing completely
+            }
+          }
+          
+          return {
+            'users': usersList,
+            'totalElements': data['totalElements'] ?? 0,
+            'totalPages': data['totalPages'] ?? 0,
+            'currentPage': data['page'] ?? 0,
+            'pageSize': data['size'] ?? size,
+          };
+        }
+      }
+      
+      throw Exception('Failed to load users: ${response.statusCode}');
+    } catch (e) {
+      print('Error fetching users: $e');
+      rethrow;
+    }
+  }
+
+  /// Get all orders and count by user email
+  /// Also accepts a map of userId -> email for matching numeric IDs
+  static Future<Map<String, int>> getUserOrderCounts(
+    List<String> userEmails, {
+    Map<String, String>? userIdToEmailMap,
+  }) async {
+    final Map<String, int> counts = {};
+    
+    // Initialize all user counts to 0
+    for (final email in userEmails) {
+      counts[email] = 0;
+    }
+    
+    try {
+      // Fetch all orders (endpoint returns List directly, not paginated)
+      final response = await http
+          .get(Uri.parse(ApiConfig.ordersUrl))
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> orders = json.decode(response.body);
+        
+        print('Fetched ${orders.length} orders for counting');
+        
+        // Create reverse lookup: email -> all possible identifiers
+        final emailToIdentifiers = <String, Set<String>>{};
+        for (final email in userEmails) {
+          emailToIdentifiers[email] = {email, email.toLowerCase()};
+        }
+        if (userIdToEmailMap != null) {
+          for (final entry in userIdToEmailMap.entries) {
+            final email = entry.value;
+            if (emailToIdentifiers.containsKey(email)) {
+              emailToIdentifiers[email]!.add(entry.key);
+            }
+          }
+        }
+        
+        // Count orders per user
+        for (final order in orders) {
+          final orderUserId = order['userId']?.toString() ?? 
+                             order['user_id']?.toString() ?? 
+                             order['customerId']?.toString() ??
+                             order['customer_id']?.toString();
+          
+          if (orderUserId != null) {
+            // Try to find matching email
+            String? matchedEmail;
+            
+            // Direct match
+            if (counts.containsKey(orderUserId)) {
+              matchedEmail = orderUserId;
+            } else {
+              // Case-insensitive match
+              final lowerOrderUserId = orderUserId.toLowerCase();
+              for (final email in userEmails) {
+                if (email.toLowerCase() == lowerOrderUserId) {
+                  matchedEmail = email;
+                  break;
+                }
+              }
+              
+              // Try numeric ID match if we have the map
+              if (matchedEmail == null && userIdToEmailMap != null) {
+                matchedEmail = userIdToEmailMap[orderUserId];
+              }
+            }
+            
+            if (matchedEmail != null && counts.containsKey(matchedEmail)) {
+              counts[matchedEmail] = (counts[matchedEmail] ?? 0) + 1;
+            }
+          }
+        }
+        
+        print('Order counts calculated: $counts');
+      } else {
+        print('Failed to fetch orders: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching orders for counting: $e');
+      // Return empty counts, will fall back to cached totalOrders
+    }
+    
+    return counts;
   }
 }
 
