@@ -214,6 +214,7 @@ class ApiService {
     int page = 0,
     int size = 50,
     String sortBy = 'createdAt',
+    bool sortAsc = true,
     String? search,
   }) async {
     try {
@@ -243,6 +244,7 @@ class ApiService {
           };
         }
       } else {
+        // Backend only supports sortBy, not direction - we'll sort client-side if needed
         final url = '${ApiConfig.usersUrl}?page=$page&size=$size&sortBy=$sortBy';
         response = await http.get(Uri.parse(url)).timeout(_timeout);
         
@@ -265,8 +267,11 @@ class ApiService {
             }
           }
           
+          // Backend returns descending by default, reverse if ascending is requested
+          final sortedUsers = sortAsc ? usersList.reversed.toList() : usersList;
+          
           return {
-            'users': usersList,
+            'users': sortedUsers,
             'totalElements': data['totalElements'] ?? 0,
             'totalPages': data['totalPages'] ?? 0,
             'currentPage': data['page'] ?? 0,

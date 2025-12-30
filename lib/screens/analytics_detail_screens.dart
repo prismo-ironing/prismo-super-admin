@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/analytics.dart';
@@ -49,6 +50,9 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   int _totalPages = 0;
   bool get _hasMoreItems => _currentPage < _totalPages - 1;
   final ScrollController _scrollController = ScrollController();
+  
+  // Search debounce timer
+  Timer? _searchDebounceTimer;
 
   @override
   void initState() {
@@ -64,6 +68,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   void dispose() {
     if (widget.type == 'users') {
       _scrollController.dispose();
+      _searchDebounceTimer?.cancel();
     }
     super.dispose();
   }
@@ -177,19 +182,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : widget.type == 'users'
-              ? Column(
-                  children: [
-                    // Business Insights at the top
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: _buildInsights(typeColor),
-                    ),
-                    // Search and Filter bar
-                    _buildSearchAndFilter(typeColor),
-                    // Users list (scrollable)
-                    Expanded(child: _buildUserList()),
-                  ],
-                )
+              ? _buildScrollableUserContent(typeColor)
               : Column(
                   children: [
                     if (widget.type != 'users') _buildFilters(typeColor),
@@ -561,7 +554,8 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       case 'orders':
         return _buildOrderList();
       case 'users':
-        return _buildUserList();
+        // Users use _buildScrollableUserContent directly in body
+        return const SizedBox.shrink();
       default:
         return _buildGenericList();
     }
@@ -837,7 +831,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
               onChanged: (value) {
                 setState(() {
                   _sortBy = value ?? 'createdAt';
-                  _loadUsers();
+                  _loadUsers(reset: true); // Sort requires server reload
                 });
               },
             ),
@@ -860,7 +854,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
               onPressed: () {
                 setState(() {
                   _sortAsc = !_sortAsc;
-                  _loadUsers();
+                  _loadUsers(reset: true); // Sort requires server reload
                 });
               },
               tooltip: _sortAsc ? 'Ascending' : 'Descending',
@@ -876,40 +870,63 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       _searchQuery = value;
     });
     
-    // Debounce search - reload after user stops typing
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_searchQuery == value) {
+    // Cancel previous timer
+    _searchDebounceTimer?.cancel();
+    
+    // Client-side search - instant filtering on cached users
+    // Only reload from server if we don't have enough cached data
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _applyClientSideSearch();
+      
+      // If search query is empty or we have enough cached users, just filter
+      // Otherwise, if search is too specific and we don't have results, reload from server
+      if (_searchQuery.trim().isNotEmpty && _filteredUsers.isEmpty && _users.length < _totalElements) {
+        // Reload from server with search query if we don't have enough cached data
         _loadUsers();
       }
     });
   }
 
   void _applyFilters() {
-    _loadUsers();
+    // Filters require server-side reload, so reset and reload
+    _loadUsers(reset: true);
   }
 
-  Future<void> _loadUsers() async {
-    setState(() {
-      _isLoadingUsers = true;
-      _users = [];
-      _filteredUsers = [];
-      _currentPage = 0;
-    });
+  Future<void> _loadUsers({bool reset = true}) async {
+    if (reset) {
+      setState(() {
+        _isLoadingUsers = true;
+        _users = [];
+        _filteredUsers = [];
+        _currentPage = 0;
+      });
+    }
 
     try {
+      // Only send search to server if we're resetting or if search is very specific
+      // Otherwise, use client-side search on cached data
       final data = await ApiService.getAllUsers(
         page: 0,
         size: _pageSize,
         sortBy: _sortBy,
-        search: _searchQuery.trim().isEmpty ? null : _searchQuery.trim(),
+        sortAsc: _sortAsc,
+        // Only search on server if we're doing initial load or filter/sort changed
+        // For typing in search, use client-side filtering
+        search: reset && _searchQuery.trim().isNotEmpty ? _searchQuery.trim() : null,
       );
       
       setState(() {
-        _users = data['users'] as List<User>;
+        if (reset) {
+          _users = data['users'] as List<User>;
+        } else {
+          // Append to existing users for pagination
+          _users.addAll(data['users'] as List<User>);
+        }
         _totalElements = data['totalElements'] as int;
         _totalPages = data['totalPages'] as int;
+        _currentPage = 0;
         _loadUserOrderCounts();
-        _applyClientSideFilter();
+        _applyClientSideSearch(); // Apply search and filter on loaded data
         _isLoadingUsers = false;
       });
     } catch (e) {
@@ -935,7 +952,9 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
         page: nextPage,
         size: _pageSize,
         sortBy: _sortBy,
-        search: _searchQuery.trim().isEmpty ? null : _searchQuery.trim(),
+        sortAsc: _sortAsc,
+        // Don't send search query for pagination - we'll filter client-side
+        search: null,
       );
       
       setState(() {
@@ -945,7 +964,7 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
         _totalElements = data['totalElements'] as int;
         _totalPages = data['totalPages'] as int;
         _loadUserOrderCounts();
-        _applyClientSideFilter();
+        _applyClientSideSearch(); // Re-apply search and filter on expanded dataset
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -996,8 +1015,21 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     return _userOrderCounts[user.email] ?? user.totalOrders;
   }
 
-  void _applyClientSideFilter() {
+  // Client-side search on already loaded users (instant, no server call)
+  void _applyClientSideSearch() {
     var filtered = List<User>.from(_users);
+    
+    // Apply search query first (client-side filtering)
+    if (_searchQuery.trim().isNotEmpty) {
+      final query = _searchQuery.toLowerCase().trim();
+      filtered = filtered.where((user) {
+        return user.fullName.toLowerCase().contains(query) ||
+            user.email.toLowerCase().contains(query) ||
+            (user.phoneNumber?.toLowerCase().contains(query) ?? false) ||
+            (user.city?.toLowerCase().contains(query) ?? false) ||
+            (user.state?.toLowerCase().contains(query) ?? false);
+      }).toList();
+    }
     
     // Apply status filter - Active means has placed orders
     if (_selectedFilter == 'active') {
@@ -1011,50 +1043,74 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     });
   }
 
-  Widget _buildUserList() {
+  void _applyClientSideFilter() {
+    // This method now just calls the combined search + filter method
+    _applyClientSideSearch();
+  }
+
+  Widget _buildScrollableUserContent(Color typeColor) {
     if (_isLoadingUsers && _users.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Users (${_filteredUsers.length}${_totalElements > _filteredUsers.length ? ' / $_totalElements' : ''})',
-                style: GoogleFonts.inter(
-                  color: const Color(0xFF1F2937),
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (_totalElements > 0)
+    return CustomScrollView(
+      controller: _scrollController,
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        // Business Insights
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: _buildInsights(typeColor),
+          ),
+        ),
+        // Search and Filter bar
+        SliverToBoxAdapter(
+          child: _buildSearchAndFilter(typeColor),
+        ),
+        // Users header
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text(
-                  'Page ${_currentPage + 1} of $_totalPages',
+                  'Users (${_filteredUsers.length}${_totalElements > _filteredUsers.length ? ' / $_totalElements' : ''})',
                   style: GoogleFonts.inter(
-                    color: const Color(0xFF6B7280),
-                    fontSize: 14,
+                    color: const Color(0xFF1F2937),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _filteredUsers.isEmpty
-                ? Center(
-                    child: Text(
-                      _isLoadingUsers ? 'Loading users...' : 'No users found',
-                      style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+                if (_totalElements > 0)
+                  Text(
+                    'Page ${_currentPage + 1} of $_totalPages',
+                    style: GoogleFonts.inter(
+                      color: const Color(0xFF6B7280),
+                      fontSize: 14,
                     ),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    itemCount: _filteredUsers.length + (_isLoadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
+                  ),
+              ],
+            ),
+          ),
+        ),
+        // Users list
+        _filteredUsers.isEmpty
+            ? SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Text(
+                    _isLoadingUsers ? 'Loading users...' : 'No users found',
+                    style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+                  ),
+                ),
+              )
+            : SliverPadding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
                       if (index == _filteredUsers.length) {
                         return const Center(
                           child: Padding(
@@ -1065,12 +1121,14 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
                       }
                       return _buildUserCard(_filteredUsers[index]);
                     },
+                    childCount: _filteredUsers.length + (_isLoadingMore ? 1 : 0),
                   ),
-          ),
-        ],
-      ),
+                ),
+              ),
+      ],
     );
   }
+
 
   Widget _buildUserCard(User user) {
     return Container(
