@@ -660,27 +660,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildContent() {
     final showDocPanel = _selectedStoreForDocuments != null;
     
-    return Row(
-      children: [
-        // Left Panel - Managers List
-        Expanded(
-          flex: showDocPanel ? 2 : 2,
-          child: _buildManagersPanel(),
-        ),
-        // Middle Panel - Selected Manager Details
-        Expanded(
-          flex: showDocPanel ? 2 : 3,
-          child: _selectedManager != null
-              ? _buildManagerDetails(_selectedManager!)
-              : _buildNoSelectionPlaceholder(),
-        ),
-        // Right Panel - Document Review
-        if (showDocPanel)
-          Expanded(
-            flex: 3,
-            child: _buildDocumentReviewPanel(),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Left Panel - Managers List (can shrink)
+            Flexible(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: 200,
+                  maxWidth: constraints.maxWidth * 0.25,
+                ),
+                child: _buildManagersPanel(),
+              ),
+            ),
+            // Middle Panel - Selected Manager Details
+            Expanded(
+              flex: showDocPanel ? 2 : 3,
+              child: _selectedManager != null
+                  ? _buildManagerDetails(_selectedManager!)
+                  : _buildNoSelectionPlaceholder(),
+            ),
+            // Right Panel - Document Review
+            if (showDocPanel)
+              Expanded(
+                flex: 3,
+                child: _buildDocumentReviewPanel(),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -854,6 +864,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
         children: [
           // Manager Header
           Container(
@@ -1242,34 +1253,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                 ),
-                // Always show approve/reject buttons for full control
+                // Show approve/reject buttons based on current status
                 Row(
                   children: [
-                    // Always show approve button (enabled for full control)
-                    ElevatedButton.icon(
-                      onPressed: _approveVendorActivation,
-                      icon: const Icon(Icons.check_circle, size: 18),
-                      label: Text(status.activationStatus == 'APPROVED' 
-                          ? 'Re-approve Vendor' 
-                          : 'Approve Vendor'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
+                    // Show approve button only if not already approved
+                    if (status.activationStatus != 'APPROVED')
+                      ElevatedButton.icon(
+                        onPressed: _approveVendorActivation,
+                        icon: const Icon(Icons.check_circle, size: 18),
+                        label: const Text('Approve Vendor'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Always show reject button (enabled for full control)
-                    OutlinedButton.icon(
-                      onPressed: _rejectVendorActivation,
-                      icon: const Icon(Icons.cancel, size: 18),
-                      label: Text(status.activationStatus == 'REJECTED'
-                          ? 'Reject Again'
-                          : 'Reject Vendor'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
+                    // Show reject button only if not already rejected
+                    if (status.activationStatus != 'REJECTED') ...[
+                      if (status.activationStatus != 'APPROVED')
+                        const SizedBox(width: 12),
+                      OutlinedButton.icon(
+                        onPressed: _rejectVendorActivation,
+                        icon: const Icon(Icons.cancel, size: 18),
+                        label: const Text('Reject Vendor'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red,
+                          side: const BorderSide(color: Colors.red),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ],
@@ -1423,12 +1434,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
           
-          // Action Buttons (always visible for full control)
+          // Action Buttons (show opposite action based on current status)
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Show reject button if not already rejected
+              // Show reject button only if not already rejected
               if (!doc.isRejected)
                 OutlinedButton.icon(
                   onPressed: () => _showRejectDialog(doc),
@@ -1439,7 +1450,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     side: const BorderSide(color: Colors.red),
                   ),
                 ),
-              // Show approve button if not already approved
+              // Show approve button only if not already approved
               if (!doc.isApproved) ...[
                 if (!doc.isRejected)
                   const SizedBox(width: 12),
