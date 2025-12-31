@@ -265,18 +265,85 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
   }
 
   Future<void> _openAttachment(String? url) async {
-    if (url == null || url.isEmpty) return;
+    if (_selectedTicket == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No ticket selected'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
 
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot open attachment URL'),
-          backgroundColor: Colors.red,
-        ),
+    try {
+      String? attachmentUrl;
+      
+      // Use object key to construct public URL (doesn't expire)
+      // Format: https://storage.cloud.google.com/{bucket}/{objectKey}
+      if (_selectedTicket!.attachmentGcsObjectKey != null && 
+          _selectedTicket!.attachmentGcsObjectKey!.isNotEmpty) {
+        attachmentUrl = 'https://storage.cloud.google.com/prismo-support-tickets/${_selectedTicket!.attachmentGcsObjectKey}';
+        print('Using public URL from object key: $attachmentUrl');
+      } 
+      // Fallback to stored URL if object key not available
+      else if (_selectedTicket!.attachmentFileUrl != null && 
+               _selectedTicket!.attachmentFileUrl!.isNotEmpty) {
+        attachmentUrl = _selectedTicket!.attachmentFileUrl;
+        print('Using stored URL: $attachmentUrl');
+      }
+      
+      if (attachmentUrl == null || attachmentUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Attachment URL is not available'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+
+      final uri = Uri.parse(attachmentUrl);
+      
+      // For web, use inAppWebView to handle the URL properly
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.inAppWebView,
       );
+      
+      if (!launched) {
+        // If inAppWebView fails, try external application
+        try {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (e) {
+          print('Failed to open with external application: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Failed to open attachment. Please try again.'),
+                backgroundColor: Colors.red,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error opening attachment: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening attachment: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
@@ -1649,17 +1716,15 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF6366F1).withOpacity(0.1),
-                  Colors.transparent,
-                ],
-              ),
+              color: Colors.grey.shade50,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.support_agent, color: Color(0xFF6366F1)),
+                Icon(Icons.support_agent, color: Colors.grey[700], size: 22),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
@@ -1667,11 +1732,12 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                     style: GoogleFonts.inter(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
+                      color: const Color(0xFF1F2937),
                     ),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close),
+                  icon: Icon(Icons.close, color: Colors.grey[700]),
                   onPressed: () {
                     setState(() {
                       _showDetailPanel = false;
@@ -1718,30 +1784,23 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF6366F1).withOpacity(0.1),
-                          const Color(0xFF8B5CF6).withOpacity(0.1),
-                        ],
-                      ),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withOpacity(0.3),
-                      ),
+                      border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.title, color: const Color(0xFF6366F1), size: 18),
+                            Icon(Icons.title, color: Colors.grey[600], size: 18),
                             const SizedBox(width: 8),
                             Text(
                               'Title',
                               style: GoogleFonts.inter(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF6366F1),
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[700],
                               ),
                             ),
                           ],
@@ -1750,8 +1809,8 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                         Text(
                           ticket.title,
                           style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                             color: const Color(0xFF1F2937),
                           ),
                         ),
@@ -1802,62 +1861,36 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                   // Agent Response
                   if (ticket.agentResponse != null) ...[
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.green.shade100,
-                            Colors.green.shade50,
-                          ],
-                        ),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.shade400, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.green.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                        border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade600,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.support_agent, color: Colors.white, size: 20),
-                              ),
-                              const SizedBox(width: 12),
+                              Icon(Icons.support_agent, color: Colors.grey[600], size: 18),
+                              const SizedBox(width: 8),
                               Text(
                                 'Agent Response',
                                 style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                  color: Colors.green.shade900,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              ticket.agentResponse!,
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: const Color(0xFF1F2937),
-                                height: 1.6,
-                              ),
+                          const SizedBox(height: 12),
+                          Text(
+                            ticket.agentResponse!,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: const Color(0xFF1F2937),
+                              height: 1.5,
                             ),
                           ),
                         ],
@@ -1869,102 +1902,73 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                   // Attachment
                   if (ticket.hasAttachment) ...[
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.blue.shade100,
-                            Colors.blue.shade50,
-                          ],
-                        ),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.shade400, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.blue.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                        border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade600,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.attach_file, color: Colors.white, size: 20),
-                              ),
-                              const SizedBox(width: 12),
+                              Icon(Icons.attach_file, color: Colors.grey[600], size: 18),
+                              const SizedBox(width: 8),
                               Text(
                                 'Attachment',
                                 style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                  color: Colors.blue.shade900,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(height: 12),
+                          if (ticket.attachmentFileName != null)
+                            Row(
                               children: [
-                                if (ticket.attachmentFileName != null)
-                                  Row(
-                                    children: [
-                                      Icon(Icons.insert_drive_file, color: Colors.blue.shade700, size: 20),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          ticket.attachmentFileName!,
-                                          style: GoogleFonts.inter(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w600,
-                                            color: const Color(0xFF1F2937),
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                if (ticket.attachmentFileSize != null) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Size: ${(ticket.attachmentFileSize! / 1024).toStringAsFixed(1)} KB',
+                                Icon(Icons.insert_drive_file, color: Colors.grey[600], size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    ticket.attachmentFileName!,
                                     style: GoogleFonts.inter(
                                       fontSize: 13,
-                                      color: Colors.blue.shade700,
                                       fontWeight: FontWeight.w500,
+                                      color: const Color(0xFF1F2937),
                                     ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ],
+                                ),
                               ],
                             ),
-                          ),
+                          if (ticket.attachmentFileSize != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Size: ${(ticket.attachmentFileSize! / 1024).toStringAsFixed(1)} KB',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           ElevatedButton.icon(
-                            onPressed: () => _openAttachment(ticket.attachmentFileUrl),
-                            icon: const Icon(Icons.open_in_new, size: 18),
+                            onPressed: ticket.attachmentFileUrl != null && ticket.attachmentFileUrl!.isNotEmpty
+                                ? () => _openAttachment(ticket.attachmentFileUrl)
+                                : null,
+                            icon: const Icon(Icons.open_in_new, size: 16),
                             label: const Text('Open Attachment'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue.shade600,
+                              backgroundColor: Colors.grey[800],
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
+                              elevation: 0,
                             ),
                           ),
                         ],
@@ -2032,27 +2036,22 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          const Color(0xFF6366F1).withOpacity(0.05),
-                          const Color(0xFF8B5CF6).withOpacity(0.05),
-                        ],
-                      ),
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.2)),
+                      border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.settings, color: const Color(0xFF6366F1), size: 20),
+                            Icon(Icons.settings, color: Colors.grey[700], size: 20),
                             const SizedBox(width: 8),
                             Text(
                               'Actions',
                               style: GoogleFonts.inter(
                                 fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w600,
                                 color: const Color(0xFF1F2937),
                               ),
                             ),
@@ -2060,8 +2059,8 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                         ),
                         const SizedBox(height: 16),
                         Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                          spacing: 10,
+                          runSpacing: 10,
                           children: [
                             // Assign button - only show if not closed
                             if (ticket.status != 'CLOSED')
@@ -2073,7 +2072,7 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                                   ticket.assignedTo != null && ticket.assignedTo!.isNotEmpty
                                       ? Icons.check_circle
                                       : Icons.person_add,
-                                  size: 18,
+                                  size: 16,
                                 ),
                                 label: Text(
                                   ticket.assignedTo != null && ticket.assignedTo!.isNotEmpty
@@ -2082,73 +2081,78 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: ticket.assignedTo != null && ticket.assignedTo!.isNotEmpty
-                                      ? Colors.grey
-                                      : const Color(0xFF1F2937),
+                                      ? Colors.grey[400]
+                                      : Colors.grey[800],
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                               ),
                             // Respond button - only show if not closed and not already resolved
                             if (ticket.status != 'CLOSED' && ticket.status != 'RESOLVED')
                               ElevatedButton.icon(
                                 onPressed: () => _showResponseDialog(ticket),
-                                icon: const Icon(Icons.reply, size: 18),
+                                icon: const Icon(Icons.reply, size: 16),
                                 label: const Text('Respond'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6366F1),
+                                  backgroundColor: Colors.grey[800],
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                               ),
                             // Reopen button - show if closed or resolved
                             if (ticket.status == 'CLOSED' || ticket.status == 'RESOLVED')
                               ElevatedButton.icon(
                                 onPressed: () => _updateTicketStatus(ticket.id, 'OPEN'),
-                                icon: const Icon(Icons.lock_open, size: 18),
+                                icon: const Icon(Icons.lock_open, size: 16),
                                 label: const Text('Reopen'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
+                                  backgroundColor: Colors.grey[800],
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                               ),
                             // Close button - only show if not already closed
                             if (ticket.status != 'CLOSED')
                               ElevatedButton.icon(
                                 onPressed: () => _updateTicketStatus(ticket.id, 'CLOSED'),
-                                icon: const Icon(Icons.lock, size: 18),
+                                icon: const Icon(Icons.lock, size: 16),
                                 label: const Text('Close'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.shade600,
+                                  backgroundColor: Colors.grey[800],
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                               ),
                             // Set to In Progress - show if open
                             if (ticket.status == 'OPEN')
                               ElevatedButton.icon(
                                 onPressed: () => _updateTicketStatus(ticket.id, 'IN_PROGRESS'),
-                                icon: const Icon(Icons.hourglass_empty, size: 18),
+                                icon: const Icon(Icons.hourglass_empty, size: 16),
                                 label: const Text('Set In Progress'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
+                                  backgroundColor: Colors.grey[800],
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
+                                  elevation: 0,
                                 ),
                               ),
                           ],
@@ -2185,50 +2189,39 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
                         ),
                         const SizedBox(height: 16),
                         Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                          spacing: 10,
+                          runSpacing: 10,
                           children: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'].map((priority) {
                             final isSelected = ticket.priority == priority;
-                            final priorityColor = _getPriorityColor(priority);
-                            return Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? priorityColor
-                                      : Colors.grey.shade300,
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: ChoiceChip(
-                                label: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isSelected)
-                                      Icon(Icons.check_circle, size: 16, color: Colors.white),
-                                    if (isSelected) const SizedBox(width: 6),
-                                    Text(
-                                      priority,
-                                      style: GoogleFonts.inter(
-                                        fontWeight: FontWeight.w600,
-                                        color: isSelected ? Colors.white : priorityColor,
-                                      ),
+                            return ChoiceChip(
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isSelected)
+                                    Icon(Icons.check_circle, size: 16, color: Colors.white),
+                                  if (isSelected) const SizedBox(width: 6),
+                                  Text(
+                                    priority,
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: isSelected ? Colors.white : const Color(0xFF1F2937),
                                     ),
-                                  ],
-                                ),
-                                selected: isSelected,
-                                onSelected: (selected) {
-                                  if (selected && !isSelected) {
-                                    _updateTicketPriority(ticket.id, priority);
-                                  }
-                                },
-                                selectedColor: priorityColor,
-                                backgroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                labelStyle: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                  ),
+                                ],
+                              ),
+                              selected: isSelected,
+                              onSelected: (selected) {
+                                if (selected && !isSelected) {
+                                  _updateTicketPriority(ticket.id, priority);
+                                }
+                              },
+                              selectedColor: Colors.grey[800],
+                              backgroundColor: Colors.grey.shade100,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              side: BorderSide(
+                                color: isSelected ? Colors.grey[800]! : Colors.grey.shade300,
+                                width: isSelected ? 2 : 1,
                               ),
                             );
                           }).toList(),
@@ -2247,55 +2240,36 @@ class _SupportTicketsManagementScreenState extends State<SupportTicketsManagemen
 
   Widget _buildDetailCard(String label, String value, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            color.withOpacity(0.15),
-            color.withOpacity(0.05),
-          ],
-        ),
+        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: Colors.grey.shade300, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, size: 18, color: Colors.white),
-              ),
-              const SizedBox(width: 12),
+              Icon(icon, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 8),
               Text(
                 label,
                 style: GoogleFonts.inter(
-                  fontSize: 13,
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: color,
+                  color: Colors.grey[700],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Text(
             value,
             style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: color,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF1F2937),
             ),
           ),
         ],

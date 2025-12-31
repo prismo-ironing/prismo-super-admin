@@ -131,5 +131,8 @@ class ApiConfig {
   
   // Add agent response
   static String addAgentResponseUrl(String ticketId) => '$supportTicketsBaseUrl/admin/$ticketId/respond';
+  
+  // Get fresh download URL for attachment
+  static String getAttachmentDownloadUrl(String ticketId) => '$supportTicketsBaseUrl/$ticketId/download-url';
 }
 
