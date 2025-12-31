@@ -87,5 +87,49 @@ class ApiConfig {
   
   static String get medicinesUrl => '$baseUrl/medicines';
   static String get inventoryStatsUrl => '$baseUrl/admin/inventory/stats';
+  
+  // =====================================================
+  // SUPPORT TICKET ENDPOINTS
+  // =====================================================
+  
+  static String get supportTicketsBaseUrl => '$baseUrl/support/tickets';
+  
+  // Get all tickets with filters (admin)
+  static String getAllTicketsUrl({
+    String? status,
+    String? priority,
+    String? orderId,
+    String? customerId,
+    int page = 0,
+    int size = 20,
+  }) {
+    final params = <String>[];
+    if (status != null && status.isNotEmpty) params.add('status=$status');
+    if (priority != null && priority.isNotEmpty) params.add('priority=$priority');
+    if (orderId != null && orderId.isNotEmpty) params.add('orderId=$orderId');
+    if (customerId != null && customerId.isNotEmpty) params.add('customerId=$customerId');
+    params.add('page=$page');
+    params.add('size=$size');
+    
+    return '$supportTicketsBaseUrl/admin/all?${params.join('&')}';
+  }
+  
+  // Get ticket by ID
+  static String getTicketByIdUrl(String ticketId) => '$supportTicketsBaseUrl/$ticketId';
+  
+  // Get ticket statistics
+  static String get ticketStatisticsUrl => '$supportTicketsBaseUrl/admin/statistics';
+  
+  // Update ticket status
+  static String updateTicketStatusUrl(String ticketId) => '$supportTicketsBaseUrl/admin/$ticketId/status';
+  
+  // Update ticket priority
+  static String updateTicketPriorityUrl(String ticketId) => '$supportTicketsBaseUrl/admin/$ticketId/priority';
+  
+  // Assign ticket to agent
+  static String assignTicketUrl(String ticketId) => '$supportTicketsBaseUrl/admin/$ticketId/assign';
+  
+  // Add agent response
+  static String addAgentResponseUrl(String ticketId) => '$supportTicketsBaseUrl/admin/$ticketId/respond';
 }
 

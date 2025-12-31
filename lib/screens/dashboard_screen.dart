@@ -8,6 +8,7 @@ import '../models/vendor_document.dart';
 import '../services/api_service.dart';
 import 'login_screen.dart';
 import 'analytics_dashboard_screen.dart';
+import 'support_tickets_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -620,6 +621,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.support_agent, color: Color(0xFF6366F1)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SupportTicketsManagementScreen()),
+              );
+            },
+            tooltip: 'Support Tickets',
+          ),
           IconButton(
             icon: const Icon(Icons.analytics, color: Color(0xFF6366F1)),
             onPressed: () {
