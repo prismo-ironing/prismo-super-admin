@@ -643,7 +643,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFF6B7280)),
-            onPressed: _loadData,
+            onPressed: () async {
+              await _loadData();
+              // Also refresh vendor documents if a store is selected for document review
+              if (_selectedStoreForDocuments != null) {
+                _loadVendorDocuments(_selectedStoreForDocuments!);
+              }
+            },
             tooltip: 'Refresh',
           ),
           const SizedBox(width: 8),
