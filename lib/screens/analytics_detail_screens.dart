@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
 import '../models/analytics.dart';
 import '../services/analytics_service.dart';
 import '../services/api_service.dart';
 import '../models/store.dart';
 import '../models/manager.dart';
 import '../models/user.dart';
+import '../config/api_config.dart';
+import 'store_statistics_screen.dart';
 
 class AnalyticsDetailScreen extends StatefulWidget {
   final String type;
@@ -49,6 +53,15 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   // Order counts map (userId -> orderCount)
   Map<String, int> _userOrderCounts = {};
   
+  // Order list state (for orders type)
+  List<Map<String, dynamic>> _orders = [];
+  Map<String, Map<String, dynamic>> _orderRatings = {}; // orderId -> rating data
+  bool _isLoadingOrders = false;
+  bool _isLoadingMoreOrders = false;
+  double? _averageRating;
+  int _totalRatedOrders = 0;
+  final ScrollController _orderScrollController = ScrollController();
+  
   // Pagination
   static const int _pageSize = 50;
   int _currentPage = 0;
@@ -75,6 +88,9 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _applyVendorFilters();
       });
+    } else if (widget.type == 'orders') {
+      _orderScrollController.addListener(_onOrderScroll);
+      _loadOrders();
     }
   }
   
@@ -86,6 +102,8 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     } else if (widget.type == 'vendors') {
       _vendorScrollController.dispose();
       _vendorSearchDebounceTimer?.cancel();
+    } else if (widget.type == 'orders') {
+      _orderScrollController.dispose();
     }
     super.dispose();
   }
@@ -98,6 +116,14 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
       if (_hasMoreItems && !_isLoadingUsers && !_isLoadingMore) {
         _loadMoreUsers();
+      }
+    }
+  }
+  
+  void _onOrderScroll() {
+    if (_orderScrollController.position.pixels >= _orderScrollController.position.maxScrollExtent - 200) {
+      if (!_isLoadingOrders && !_isLoadingMoreOrders && _orders.length < _totalElements) {
+        _loadMoreOrders();
       }
     }
   }
@@ -211,12 +237,22 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
               ? _buildScrollableUserContent(typeColor)
               : widget.type == 'vendors'
                   ? _buildScrollableVendorContent(typeColor)
-                  : Column(
-                      children: [
-                        if (widget.type != 'users' && widget.type != 'vendors') _buildFilters(typeColor),
-                        Expanded(child: _buildContent(typeColor)),
-                      ],
-                    ),
+                  : widget.type == 'orders'
+                      ? Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            children: [
+                              _buildFilters(typeColor),
+                              Expanded(child: _buildContent(typeColor)),
+                            ],
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            if (widget.type != 'users' && widget.type != 'vendors') _buildFilters(typeColor),
+                            Expanded(child: _buildContent(typeColor)),
+                          ],
+                        ),
     );
   }
 
@@ -556,6 +592,14 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
             Icons.trending_up,
             description: _getCompletionRateDescription(),
           ),
+          if (_averageRating != null)
+            _buildInsightItem(
+              'Average Rating',
+              '${_averageRating!.toStringAsFixed(2)}/5.0',
+              typeColor,
+              Icons.star_rounded,
+              description: 'Average customer rating from $_totalRatedOrders rated orders',
+            ),
           _buildInsightItem(
             'Cancellation Rate',
             '${_calculateCancellationRate().toStringAsFixed(2)}%',
@@ -1000,9 +1044,402 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
   }
 
   Widget _buildVendorCard(Store store) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => StoreStatisticsScreen(store: store),
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.store, color: Color(0xFF8B5CF6), size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          store.name,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1F2937),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: store.isActive 
+                              ? const Color(0xFF10B981).withOpacity(0.1)
+                              : const Color(0xFFEF4444).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              store.isActive ? Icons.check_circle : Icons.cancel,
+                              size: 14,
+                              color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              store.isActive ? 'Active' : 'Inactive',
+                              style: GoogleFonts.inter(
+                                color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    store.id,
+                    style: GoogleFonts.robotoMono(
+                      color: const Color(0xFF6B7280),
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (store.displayLocation != 'Location N/A') ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 14, color: const Color(0xFF6B7280)),
+                        const SizedBox(width: 4),
+                        Text(
+                          store.displayLocation,
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF6B7280),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Icon(Icons.chevron_right, color: const Color(0xFF9CA3AF)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Load orders with pagination and ratings
+  Future<void> _loadOrders({bool reset = false}) async {
+    if (reset) {
+      setState(() {
+        _orders = [];
+        _orderRatings = {};
+        _currentPage = 0;
+      });
+    }
+
+    if (_isLoadingOrders) return;
+
+    setState(() {
+      _isLoadingOrders = true;
+    });
+
+    try {
+      // Fetch orders from API (last 10 initially, then paginate)
+      final response = await http.get(
+        Uri.parse('${ApiConfig.ordersUrl}?page=${reset ? 0 : _currentPage}&size=10&sortBy=createdAt&sortAsc=false'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List<dynamic> ordersList = data is List ? data : (data['content'] ?? data['orders'] ?? []);
+        
+        // Fetch ratings for delivered/completed orders that have been rated
+        final newOrders = <Map<String, dynamic>>[];
+        for (var order in ordersList) {
+          final orderMap = order is Map<String, dynamic> ? order : Map<String, dynamic>.from(order);
+          newOrders.add(orderMap);
+          
+          // Only fetch rating if order is delivered/completed AND has orderRatingId (has been rated)
+          final status = orderMap['status']?.toString().toUpperCase() ?? '';
+          final orderRatingId = orderMap['orderRatingId'] ?? orderMap['order_rating_id'];
+          if ((status == 'DELIVERED' || status == 'ORDER_COMPLETED') && orderRatingId != null) {
+            await _fetchOrderRating(orderMap['id']?.toString() ?? '');
+          }
+        }
+
+        // Update total elements if available
+        int? totalElements;
+        if (data is Map<String, dynamic>) {
+          totalElements = data['totalElements'] as int?;
+        }
+
+        setState(() {
+          if (reset) {
+            _orders = newOrders;
+            _currentPage = 0;
+          } else {
+            _orders.addAll(newOrders);
+            _currentPage = _currentPage + 1;
+          }
+          if (totalElements != null) {
+            _totalElements = totalElements;
+          }
+          _isLoadingOrders = false;
+        });
+
+        // Calculate average rating after a short delay to allow ratings to load
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _calculateAverageRating();
+        });
+      } else {
+        setState(() {
+          _isLoadingOrders = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading orders: $e');
+      setState(() {
+        _isLoadingOrders = false;
+      });
+    }
+  }
+
+  /// Load more orders (pagination)
+  Future<void> _loadMoreOrders() async {
+    if (_isLoadingMoreOrders || _isLoadingOrders) return;
+    
+    setState(() {
+      _isLoadingMoreOrders = true;
+    });
+
+    await _loadOrders();
+    
+    setState(() {
+      _isLoadingMoreOrders = false;
+    });
+  }
+
+  /// Fetch rating for a specific order
+  Future<void> _fetchOrderRating(String orderId) async {
+    if (orderId.isEmpty || _orderRatings.containsKey(orderId)) return;
+
+    try {
+      final response = await http.get(
+        Uri.parse(ApiConfig.getOrderRatingUrl(orderId)),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final ratingData = json.decode(response.body);
+        setState(() {
+          _orderRatings[orderId] = ratingData is Map<String, dynamic> 
+              ? ratingData 
+              : Map<String, dynamic>.from(ratingData);
+        });
+      }
+    } catch (e) {
+      // 404 is expected for unrated orders - silently ignore
+      print('Rating fetch for order $orderId: ${e.toString()}');
+    }
+  }
+
+  /// Calculate average rating from all rated orders
+  void _calculateAverageRating() {
+    final ratings = _orderRatings.values
+        .where((r) => r['rating'] != null)
+        .map((r) => (r['rating'] as num).toDouble())
+        .toList();
+
+    if (ratings.isEmpty) {
+      setState(() {
+        _averageRating = null;
+        _totalRatedOrders = 0;
+      });
+      return;
+    }
+
+    final average = ratings.reduce((a, b) => a + b) / ratings.length;
+    setState(() {
+      _averageRating = average;
+      _totalRatedOrders = ratings.length;
+    });
+  }
+
+  Widget _buildOrderList() {
+    final typeColor = _getTypeColor();
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Average Rating Card
+        if (_averageRating != null) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.star_rounded, color: Colors.amber.shade700, size: 32),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Average Rating',
+                        style: GoogleFonts.inter(
+                          color: Colors.amber.shade900,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '${_averageRating!.toStringAsFixed(2)}/5.0',
+                        style: GoogleFonts.inter(
+                          color: Colors.amber.shade900,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Based on $_totalRatedOrders rated orders',
+                        style: GoogleFonts.inter(
+                          color: Colors.amber.shade700,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        
+        // Orders Header
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Recent Orders (${_orders.length}${_totalElements > 0 ? ' / $_totalElements' : ''})',
+              style: GoogleFonts.inter(
+                color: const Color(0xFF1F2937),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (_isLoadingOrders)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        // Orders List
+        if (_orders.isEmpty && !_isLoadingOrders)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Center(
+              child: Text(
+                'No orders found',
+                style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
+              ),
+            ),
+          )
+        else
+          Expanded(
+            child: ListView.builder(
+              controller: _orderScrollController,
+              itemCount: _orders.length + (_isLoadingMoreOrders ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= _orders.length) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                
+                final order = _orders[index];
+                final orderId = order['id']?.toString() ?? '';
+                final rating = _orderRatings[orderId];
+                
+                return _buildOrderCard(order, rating, typeColor);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildOrderCard(Map<String, dynamic> order, Map<String, dynamic>? rating, Color typeColor) {
+    final orderId = order['id']?.toString() ?? '';
+    final status = order['status']?.toString() ?? 'UNKNOWN';
+    final totalAmount = (order['totalAmount'] as num?)?.toDouble() ?? 0.0;
+    final totalItems = (order['totalItems'] as int?) ?? 0;
+    final createdAt = order['createdAt']?.toString() ?? '';
+    final rejectionReason = order['rejectionReason']?.toString();
+    final customerName = order['customerName']?.toString() ?? 'Customer';
+    
+    // Parse date
+    DateTime? orderDate;
+    try {
+      orderDate = createdAt.isNotEmpty ? DateTime.parse(createdAt) : null;
+    } catch (e) {
+      orderDate = null;
+    }
+    
+    // Get status color
+    Color statusColor = _getOrderStatusColor(status);
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1015,124 +1452,263 @@ class _AnalyticsDetailScreenState extends State<AnalyticsDetailScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF8B5CF6).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.store, color: Color(0xFF8B5CF6), size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          // Header Row
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        store.name,
-                        style: GoogleFonts.inter(
-                          color: const Color(0xFF1F2937),
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: store.isActive 
-                            ? const Color(0xFF10B981).withOpacity(0.1)
-                            : const Color(0xFFEF4444).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            store.isActive ? Icons.check_circle : Icons.cancel,
-                            size: 14,
-                            color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                    Row(
+                      children: [
+                        Text(
+                          'Order #${orderId.length > 8 ? orderId.substring(0, 8) : orderId}',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1F2937),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 4),
-                          Text(
-                            store.isActive ? 'Active' : 'Inactive',
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _formatOrderStatus(status),
                             style: GoogleFonts.inter(
-                              color: store.isActive ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  store.id,
-                  style: GoogleFonts.robotoMono(
-                    color: const Color(0xFF6B7280),
-                    fontSize: 12,
-                  ),
-                ),
-                if (store.displayLocation != 'Location N/A') ...[
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 14, color: const Color(0xFF6B7280)),
-                      const SizedBox(width: 4),
+                    if (orderDate != null) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        store.displayLocation,
+                        _formatDate(orderDate),
                         style: GoogleFonts.inter(
                           color: const Color(0xFF6B7280),
                           fontSize: 12,
                         ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+              // Rating Badge
+              if (rating != null && rating['rating'] != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, size: 16, color: Colors.amber.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        (rating['rating'] as num).toStringAsFixed(1),
+                        style: GoogleFonts.inter(
+                          color: Colors.amber.shade900,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Order Details
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Customer: $customerName',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF1F2937),
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Items: $totalItems | Amount: ₹${totalAmount.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        color: const Color(0xFF6B7280),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          
+          // Rejection Reason (if rejected)
+          if (rejectionReason != null && rejectionReason.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.error_outline, size: 16, color: Colors.red.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Rejection: $rejectionReason',
+                      style: GoogleFonts.inter(
+                        color: Colors.red.shade900,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
-          Icon(Icons.chevron_right, color: const Color(0xFF9CA3AF)),
+          ],
+          
+          // Rating Details (if rated)
+          if (rating != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.star_rounded, size: 16, color: Colors.amber.shade700),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Overall: ${(rating['rating'] as num).toStringAsFixed(1)}/5.0',
+                        style: GoogleFonts.inter(
+                          color: Colors.amber.shade900,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (rating['deliveryRating'] != null || rating['productRating'] != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (rating['deliveryRating'] != null) ...[
+                          Expanded(
+                            child: Text(
+                              'Delivery: ${(rating['deliveryRating'] as num).toStringAsFixed(1)}',
+                              style: GoogleFonts.inter(
+                                color: Colors.amber.shade800,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (rating['productRating'] != null) ...[
+                          Expanded(
+                            child: Text(
+                              'Product: ${(rating['productRating'] as num).toStringAsFixed(1)}',
+                              style: GoogleFonts.inter(
+                                color: Colors.amber.shade800,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                  if (rating['comment'] != null && (rating['comment'] as String).isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '"${rating['comment']}"',
+                      style: GoogleFonts.inter(
+                        color: Colors.amber.shade900,
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildOrderList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Orders',
-          style: GoogleFonts.inter(
-            color: const Color(0xFF1F2937),
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Center(
-            child: Text(
-              'Order details will be loaded from API',
-              style: GoogleFonts.inter(color: const Color(0xFF6B7280)),
-            ),
-          ),
-        ),
-      ],
-    );
+  Color _getOrderStatusColor(String status) {
+    final upperStatus = status.toUpperCase();
+    switch (upperStatus) {
+      case 'ORDER_COMPLETED':
+      case 'DELIVERED':
+        return const Color(0xFF10B981); // Green
+      case 'ORDER_PLACED':
+      case 'PENDING_FULFILLMENT':
+        return const Color(0xFF3B82F6); // Blue
+      case 'OUT_FOR_DELIVERY':
+      case 'ORDER_CONFIRMED':
+        return const Color(0xFF8B5CF6); // Purple
+      case 'ORDER_CANCELLED':
+      case 'PRESCRIPTION_REJECTED':
+        return const Color(0xFFEF4444); // Red
+      default:
+        return const Color(0xFF6B7280); // Gray
+    }
+  }
+
+  String _formatOrderStatus(String status) {
+    return status.replaceAll('_', ' ').split(' ').map((word) {
+      if (word.isEmpty) return '';
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  String _formatDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = now.difference(date);
+    
+    if (difference.inDays == 0) {
+      return 'Today ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      return '${date.day}/${date.month}/${date.year}';
+    }
   }
 
   Widget _buildSearchAndFilter(Color typeColor) {

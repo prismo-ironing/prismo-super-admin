@@ -5,6 +5,7 @@ import '../models/manager.dart';
 import '../models/store.dart';
 import '../models/vendor_document.dart';
 import '../models/user.dart';
+import '../models/store_statistics.dart';
 
 class ApiService {
   static const Duration _timeout = Duration(seconds: 30);
@@ -371,6 +372,257 @@ class ApiService {
     }
     
     return counts;
+  }
+
+  // =====================================================
+  // STORE STATISTICS
+  // =====================================================
+
+  /// Get comprehensive store statistics
+  static Future<StoreStatistics?> getStoreStatistics(String storeId) async {
+    try {
+      // Fetch vendor statistics first (required)
+      final statsData = await _getVendorStatistics(storeId);
+      
+      if (statsData == null) {
+        print('Failed to fetch vendor statistics for store: $storeId');
+        return null;
+      }
+
+      // Fetch orders and ratings in parallel (optional - don't fail if these fail)
+      List<dynamic> orders = [];
+      List<dynamic> ratings = [];
+      
+      try {
+        final results = await Future.wait([
+          _getVendorOrders(storeId),
+          _getVendorRatings(storeId),
+        ]);
+        orders = results[0] as List<dynamic>? ?? [];
+        ratings = results[1] as List<dynamic>? ?? [];
+      } catch (e) {
+        print('Warning: Failed to fetch orders/ratings, continuing with basic stats: $e');
+        // Continue with empty lists - we'll still show basic statistics
+      }
+
+      // Calculate acceptance/rejection rates from orders
+      int acceptedOrders = 0;
+      int rejectedOrders = 0;
+      
+      for (var order in orders) {
+        if (order is! Map<String, dynamic>) continue;
+        
+        final status = order['status'] as String?;
+        if (status == null) continue;
+        
+        // Orders that are confirmed, approved, or in delivery are considered accepted by vendor
+        if (status == 'ORDER_CONFIRMED' || 
+            status == 'PRESCRIPTION_APPROVED' ||
+            status == 'VENDOR_ASSIGNED' ||
+            status == 'OUT_FOR_DELIVERY' || 
+            status == 'DELIVERED' ||
+            status == 'ORDER_COMPLETED') {
+          acceptedOrders++;
+        }
+        // Orders rejected by vendor
+        if (status == 'PRESCRIPTION_REJECTED' || 
+            status == 'FULFILLMENT_FAILED') {
+          rejectedOrders++;
+        }
+      }
+
+      // Calculate rating statistics
+      double averageRating = 0.0;
+      double averageDeliveryRating = 0.0;
+      double averageProductRating = 0.0;
+      int totalRatings = ratings.length;
+
+      if (ratings.isNotEmpty) {
+        double totalRating = 0.0;
+        double totalDeliveryRating = 0.0;
+        double totalProductRating = 0.0;
+        int deliveryRatingCount = 0;
+        int productRatingCount = 0;
+
+        for (var rating in ratings) {
+          if (rating is! Map<String, dynamic>) continue;
+          
+          final ratingValue = (rating['rating'] as num?)?.toDouble();
+          final deliveryRatingValue = (rating['deliveryRating'] as num?)?.toDouble();
+          final productRatingValue = (rating['productRating'] as num?)?.toDouble();
+
+          if (ratingValue != null && ratingValue > 0) {
+            totalRating += ratingValue;
+          }
+          if (deliveryRatingValue != null && deliveryRatingValue > 0) {
+            totalDeliveryRating += deliveryRatingValue;
+            deliveryRatingCount++;
+          }
+          if (productRatingValue != null && productRatingValue > 0) {
+            totalProductRating += productRatingValue;
+            productRatingCount++;
+          }
+        }
+
+        if (totalRatings > 0 && totalRating > 0) {
+          averageRating = totalRating / totalRatings;
+        }
+        if (deliveryRatingCount > 0) {
+          averageDeliveryRating = totalDeliveryRating / deliveryRatingCount;
+        }
+        if (productRatingCount > 0) {
+          averageProductRating = totalProductRating / productRatingCount;
+        }
+      }
+
+      // Get store name from stats or use fallback
+      final storeName = statsData['vendorName'] as String? ?? 
+                       statsData['storeName'] as String? ?? 
+                       statsData['name'] as String? ?? 
+                       'Unknown Store';
+
+      // Combine all statistics with proper null safety
+      final combinedStats = <String, dynamic>{
+        ...statsData,
+        'storeId': storeId,
+        'storeName': storeName,
+        'acceptedOrders': acceptedOrders,
+        'rejectedOrders': rejectedOrders,
+        'averageRating': averageRating,
+        'totalRatings': totalRatings,
+        'averageDeliveryRating': averageDeliveryRating,
+        'averageProductRating': averageProductRating,
+      };
+
+      return StoreStatistics.fromJson(combinedStats);
+    } catch (e, stackTrace) {
+      print('Error fetching store statistics: $e');
+      print('Stack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// Get vendor statistics from backend
+  static Future<Map<String, dynamic>?> _getVendorStatistics(String vendorId) async {
+    try {
+      final url = '${ApiConfig.baseUrl}/vendors/profile/$vendorId/statistics';
+      print('Fetching vendor statistics from: $url');
+      
+      final response = await http
+          .get(Uri.parse(url))
+          .timeout(_timeout);
+
+      print('Vendor statistics response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          return data;
+        } else if (data is Map) {
+          return Map<String, dynamic>.from(data);
+        }
+        print('Unexpected response format: ${data.runtimeType}');
+        return null;
+      } else {
+        print('Failed to fetch vendor statistics: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e, stackTrace) {
+      print('Error fetching vendor statistics: $e');
+      print('Stack trace: $stackTrace');
+      return null;
+    }
+  }
+
+  /// Get all orders for a vendor
+  static Future<List<dynamic>> _getVendorOrders(String vendorId) async {
+    try {
+      // Use vendor-specific orders endpoint
+      final response = await http
+          .get(Uri.parse('${ApiConfig.baseUrl}/vendors/profile/$vendorId/orders'))
+          .timeout(_timeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        // Response might be a list or an object with orders array
+        if (data is List) {
+          return data;
+        } else if (data is Map && data.containsKey('orders')) {
+          return data['orders'] as List<dynamic>;
+        } else if (data is Map && data.containsKey('content')) {
+          return data['content'] as List<dynamic>;
+        }
+        return [];
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching vendor orders: $e');
+      return [];
+    }
+  }
+
+  /// Get all ratings for a vendor
+  static Future<List<dynamic>> _getVendorRatings(String vendorId) async {
+    try {
+      // Since there's no direct endpoint for vendor ratings, we'll fetch all orders
+      // and then get ratings for completed orders only (ratings are only for completed orders)
+      final orders = await _getVendorOrders(vendorId);
+      final ratings = <dynamic>[];
+
+      if (orders.isEmpty) {
+        return ratings;
+      }
+
+      // Filter to only completed orders (ratings are typically only for completed orders)
+      final completedOrderIds = orders
+          .where((o) {
+            if (o is! Map<String, dynamic>) return false;
+            final status = o['status'] as String?;
+            return status == 'ORDER_COMPLETED' || status == 'DELIVERED';
+          })
+          .take(30) // Limit to 30 most recent completed orders to avoid too many API calls
+          .map((o) {
+            if (o is Map<String, dynamic>) {
+              return o['id'] ?? o['orderId'] ?? o['order_id'];
+            }
+            return null;
+          })
+          .whereType<String>()
+          .toList();
+      
+      if (completedOrderIds.isEmpty) {
+        return ratings;
+      }
+      
+      // Fetch ratings sequentially to avoid overwhelming the server (404s are expected)
+      for (var orderId in completedOrderIds) {
+        try {
+          final ratingResponse = await http
+              .get(Uri.parse(ApiConfig.getOrderRatingUrl(orderId)))
+              .timeout(const Duration(seconds: 3));
+
+          if (ratingResponse.statusCode == 200) {
+            final rating = json.decode(ratingResponse.body);
+            if (rating is Map<String, dynamic> && 
+                (rating['vendorId'] == vendorId || rating['vendor_id'] == vendorId)) {
+              ratings.add(rating);
+            }
+          }
+          // Silently ignore 404s - they're expected for orders without ratings
+        } catch (e) {
+          // Silently continue if rating doesn't exist (404 is expected for orders without ratings)
+          // Only log if it's not a 404
+          if (e.toString().contains('404') == false) {
+            // Don't log 404s, they're expected
+          }
+        }
+      }
+
+      return ratings;
+    } catch (e) {
+      print('Error fetching vendor ratings: $e');
+      return [];
+    }
   }
 }
 

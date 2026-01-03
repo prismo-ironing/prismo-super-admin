@@ -134,5 +134,12 @@ class ApiConfig {
   
   // Get fresh download URL for attachment
   static String getAttachmentDownloadUrl(String ticketId) => '$supportTicketsBaseUrl/$ticketId/download-url';
+  
+  // =====================================================
+  // RATING ENDPOINTS
+  // =====================================================
+  
+  static String get ratingsBaseUrl => '$baseUrl/ratings';
+  static String getOrderRatingUrl(String orderId) => '$ratingsBaseUrl/orders/$orderId';
+  static String getVendorRatingsUrl(String vendorId) => '$ratingsBaseUrl/vendors/$vendorId';
 }
-
